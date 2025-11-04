@@ -445,3 +445,35 @@ class AuthSystem {
 
 // Inicializar sistema de autenticación
 const authSystem = new AuthSystem();
+    // Método para toggle del menú de usuario
+    setupUserDropdown() {
+        const dropdownBtn = document.querySelector('.user-dropdown-btn');
+        const dropdownContent = document.getElementById('userDropdown');
+
+        if (dropdownBtn && dropdownContent) {
+            dropdownBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdownContent.classList.toggle('show');
+            });
+
+            // Cerrar dropdown al hacer clic fuera
+            document.addEventListener('click', () => {
+                dropdownContent.classList.remove('show');
+            });
+        }
+    }
+
+    // Llamar este método después de login exitoso
+    async login(user) {
+        this.currentUser = user;
+        
+        // Actualizar último login
+        await database.updateUser(user.id, {
+            lastLogin: new Date().toISOString()
+        });
+
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        this.showMainSystem();
+        this.updateUI();
+        this.setupUserDropdown(); // Configurar menú de usuario
+    }
