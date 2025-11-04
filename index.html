@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Flota Vehicular</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Sistema de Login -->
+    <div id="loginSystem" class="login-container">
+        <div class="login-form">
+            <div class="logo">
+                <i class="fas fa-truck-moving"></i>
+                <h2>Gestión de Flota</h2>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Usuario:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit" class="btn-primary">Iniciar Sesión</button>
+            </form>
+            <div class="demo-accounts">
+                <p><strong>Cuentas de demostración:</strong></p>
+                <p>Admin: admin / admin123</p>
+                <p>Operador: operador / operador123</p>
+                <p>Invitado: invitado / invitado123</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sistema Principal -->
+    <div id="mainSystem" class="main-system hidden">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <button id="sidebarToggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1><i class="fas fa-truck-moving"></i> Gestión de Flota</h1>
+            </div>
+            <div class="header-right">
+                <span id="currentUser" class="user-info"></span>
+                <span id="userRole" class="user-role"></span>
+                <button id="logoutBtn" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i> Salir
+                </button>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <nav id="sidebar" class="sidebar">
+            <ul class="sidebar-menu">
+                <li><a href="#dashboard" class="menu-item active" data-module="dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                <li><a href="#vehicles" class="menu-item" data-module="vehicles"><i class="fas fa-car"></i> Vehículos</a></li>
+                <li><a href="#maintenance" class="menu-item" data-module="maintenance"><i class="fas fa-tools"></i> Mantenimiento</a></li>
+                <li><a href="#expenses" class="menu-item" data-module="expenses"><i class="fas fa-money-bill-wave"></i> Gastos</a></li>
+                <li><a href="#reports" class="menu-item" data-module="reports"><i class="fas fa-chart-bar"></i> Reportes</a></li>
+                <li id="adminMenu" class="hidden"><a href="#admin" class="menu-item" data-module="admin"><i class="fas fa-cog"></i> Administración</a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Module -->
+            <div id="dashboard" class="module active">
+                <div class="module-header">
+                    <h2>Dashboard Principal</h2>
+                    <div class="header-actions">
+                        <button class="btn-secondary" onclick="generateQuickReport()">
+                            <i class="fas fa-download"></i> Reporte Rápido
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-car"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalVehicles">0</h3>
+                            <p>Vehículos Registrados</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="openIssues">0</h3>
+                            <p>Fallas Abiertas</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon success">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="resolvedIssues">0</h3>
+                            <p>Fallas Resueltas</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon danger">
+                            <i class="fas fa-money-bill-wave"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalExpenses">$0</h3>
+                            <p>Gastos del Mes</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <h3>Presupuesto vs Ejecutado</h3>
+                        <canvas id="budgetChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Fallas por Componente</h3>
+                        <canvas id="failuresChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Gastos por Tipo</h3>
+                        <canvas id="expensesChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Fallas por Mes</h3>
+                        <canvas id="monthlyFailuresChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="recent-activity">
+                    <h3>Actividad Reciente</h3>
+                    <div id="recentActivity" class="activity-list">
+                        <!-- Las actividades se cargarán dinámicamente -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vehicles Module -->
+            <div id="vehicles" class="module">
+                <div class="module-header">
+                    <h2>Gestión de Vehículos</h2>
+                    <div class="header-actions">
+                        <button class="btn-primary" onclick="showVehicleForm()">
+                            <i class="fas fa-plus"></i> Nuevo Vehículo
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filters">
+                    <input type="text" id="vehicleSearch" placeholder="Buscar por placa, marca, modelo..." class="search-input">
+                    <select id="regionalFilter" class="filter-select">
+                        <option value="">Todas las Regionales</option>
+                        <option value="Norte">Norte</option>
+                        <option value="Sur">Sur</option>
+                        <option value="Centro">Centro</option>
+                    </select>
+                </div>
+
+                <div class="table-container">
+                    <table id="vehiclesTable" class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Placa</th>
+                                <th>Marca</th>
+                                <th>Modelo</th>
+                                <th>Año</th>
+                                <th>Regional</th>
+                                <th>Capacidad</th>
+                                <th>Odómetro</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vehiclesTableBody">
+                            <!-- Los vehículos se cargarán dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Maintenance Module -->
+            <div id="maintenance" class="module">
+                <div class="module-header">
+                    <h2>Gestión de Mantenimiento</h2>
+                    <div class="header-actions">
+                        <button class="btn-primary" onclick="showFailureForm()">
+                            <i class="fas fa-plus"></i> Registrar Falla
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab-button active" data-tab="openFailures">Fallas Abiertas</button>
+                    <button class="tab-button" data-tab="inProgressFailures">En Proceso</button>
+                    <button class="tab-button" data-tab="resolvedFailures">Resueltas</button>
+                </div>
+
+                <div class="tab-content">
+                    <div id="openFailures" class="tab-pane active">
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Placa</th>
+                                        <th>Componente</th>
+                                        <th>Fecha Falla</th>
+                                        <th>Prioridad</th>
+                                        <th>Descripción</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="openFailuresTableBody">
+                                    <!-- Las fallas abiertas se cargarán dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="inProgressFailures" class="tab-pane">
+                        <!-- Contenido similar para fallas en proceso -->
+                    </div>
+                    <div id="resolvedFailures" class="tab-pane">
+                        <!-- Contenido similar para fallas resueltas -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expenses Module -->
+            <div id="expenses" class="module">
+                <div class="module-header">
+                    <h2>Gestión de Gastos</h2>
+                    <div class="header-actions">
+                        <button class="btn-primary" onclick="showExpenseForm()">
+                            <i class="fas fa-plus"></i> Registrar Gasto
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filters">
+                    <select id="expenseTypeFilter" class="filter-select">
+                        <option value="">Todos los Tipos</option>
+                        <option value="Mantenimiento Correctivo">Mantenimiento Correctivo</option>
+                        <option value="Combustible">Combustible</option>
+                        <option value="Mantenimiento Preventivo">Mantenimiento Preventivo</option>
+                        <option value="Documentación/Seguros">Documentación/Seguros</option>
+                        <option value="Peajes/Viáticos">Peajes/Viáticos</option>
+                    </select>
+                    <input type="month" id="expenseMonthFilter" class="filter-select">
+                </div>
+
+                <div class="table-container">
+                    <table id="expensesTable" class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Tipo</th>
+                                <th>Monto</th>
+                                <th>Vehículo</th>
+                                <th>Regional</th>
+                                <th>Proveedor</th>
+                                <th>Comprobante</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expensesTableBody">
+                            <!-- Los gastos se cargarán dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Reports Module -->
+            <div id="reports" class="module">
+                <div class="module-header">
+                    <h2>Reportes y Análisis</h2>
+                    <div class="header-actions">
+                        <button class="btn-primary" onclick="generateComprehensiveReport()">
+                            <i class="fas fa-file-pdf"></i> Generar Reporte Completo
+                        </button>
+                    </div>
+                </div>
+
+                <div class="reports-grid">
+                    <div class="report-card" onclick="showReport('budget')">
+                        <i class="fas fa-chart-line"></i>
+                        <h3>Presupuesto vs Ejecutado</h3>
+                        <p>Comparativa mensual por regional</p>
+                    </div>
+                    <div class="report-card" onclick="showReport('failures')">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Análisis de Fallas</h3>
+                        <p>Estadísticas de fallas por componente</p>
+                    </div>
+                    <div class="report-card" onclick="showReport('expenses')">
+                        <i class="fas fa-money-bill-wave"></i>
+                        <h3>Gastos Detallados</h3>
+                        <p>Desglose por tipo y vehículo</p>
+                    </div>
+                    <div class="report-card" onclick="showReport('maintenance')">
+                        <i class="fas fa-tools"></i>
+                        <h3>Mantenimiento</h3>
+                        <p>Historial y costos de mantenimiento</p>
+                    </div>
+                </div>
+
+                <div id="reportContent" class="report-content">
+                    <!-- El contenido del reporte se cargará dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Admin Module -->
+            <div id="admin" class="module">
+                <div class="module-header">
+                    <h2>Administración del Sistema</h2>
+                </div>
+
+                <div class="admin-tabs">
+                    <button class="admin-tab-button active" data-tab="budgetConfig">Presupuesto</button>
+                    <button class="admin-tab-button" data-tab="userManagement">Usuarios</button>
+                    <button class="admin-tab-button" data-tab="systemConfig">Configuración</button>
+                </div>
+
+                <div class="admin-tab-content">
+                    <div id="budgetConfig" class="admin-tab-pane active">
+                        <h3>Configuración de Presupuesto</h3>
+                        <form id="budgetForm" class="budget-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="budgetRegional">Regional:</label>
+                                    <select id="budgetRegional" required>
+                                        <option value="Norte">Norte</option>
+                                        <option value="Sur">Sur</option>
+                                        <option value="Centro">Centro</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="budgetMonth">Mes:</label>
+                                    <input type="month" id="budgetMonth" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="budgetAmount">Monto Presupuestado:</label>
+                                    <input type="number" id="budgetAmount" step="0.01" required>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary">Guardar Presupuesto</button>
+                        </form>
+
+                        <div class="budget-list">
+                            <h4>Presupuestos Configurados</h4>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Regional</th>
+                                        <th>Mes</th>
+                                        <th>Presupuesto</th>
+                                        <th>Ejecutado</th>
+                                        <th>Diferencia</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="budgetTableBody">
+                                    <!-- Los presupuestos se cargarán dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="userManagement" class="admin-tab-pane">
+                        <h3>Gestión de Usuarios</h3>
+                        <button class="btn-primary" onclick="showUserForm()">
+                            <i class="fas fa-plus"></i> Nuevo Usuario
+                        </button>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Usuario</th>
+                                        <th>Nombre</th>
+                                        <th>Rol</th>
+                                        <th>Estado</th>
+                                        <th>Último Acceso</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTableBody">
+                                    <!-- Los usuarios se cargarán dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="systemConfig" class="admin-tab-pane">
+                        <h3>Configuración del Sistema</h3>
+                        <form class="config-form">
+                            <div class="form-group">
+                                <label for="systemName">Nombre del Sistema:</label>
+                                <input type="text" id="systemName" value="Gestión de Flota Vehicular">
+                            </div>
+                            <div class="form-group">
+                                <label for="defaultRegional">Regional Predeterminada:</label>
+                                <select id="defaultRegional">
+                                    <option value="Norte">Norte</option>
+                                    <option value="Sur">Sur</option>
+                                    <option value="Centro">Centro</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="maintenanceAlert">Alerta de Mantenimiento (días):</label>
+                                <input type="number" id="maintenanceAlert" value="7" min="1">
+                            </div>
+                            <button type="submit" class="btn-primary">Guardar Configuración</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal para formularios -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Título del Modal</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- El contenido del formulario se cargará dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/vehicles.js"></script>
+    <script src="js/maintenance.js"></script>
+    <script src="js/expenses.js"></script>
+    <script src="js/reports.js"></script>
+</body>
+</html>
