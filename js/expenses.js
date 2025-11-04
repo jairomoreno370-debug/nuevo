@@ -1,7 +1,7 @@
-// Sistema de Gestión de Gastos
+// Sistema de Gestión de Gastos - ACTUALIZADO
 class ExpensesSystem {
     constructor() {
-        this.expenses = this.loadExpensesFromStorage();
+        this.expenses = [];
         this.expenseTypes = [
             'Mantenimiento Correctivo',
             'Combustible',
@@ -12,8 +12,19 @@ class ExpensesSystem {
         this.init();
     }
 
-    init() {
+    async init() {
+        await this.loadExpenses();
         this.setupEventListeners();
+    }
+
+    async loadExpenses() {
+        try {
+            this.expenses = await database.getExpenses();
+            this.renderExpensesTable();
+        } catch (error) {
+            console.error('Error cargando gastos:', error);
+            this.showError('Error al cargar los gastos');
+        }
     }
 
     setupEventListeners() {
@@ -29,55 +40,7 @@ class ExpensesSystem {
         }
     }
 
-    loadExpensesFromStorage() {
-        const storedExpenses = localStorage.getItem('flota_expenses');
-        if (storedExpenses) {
-            return JSON.parse(storedExpenses);
-        } else {
-            // Datos de ejemplo
-            return [
-                {
-                    id: 1,
-                    fecha: '2024-01-10',
-                    tipo: 'Combustible',
-                    monto: 350,
-                    placa: 'ABC-123',
-                    regional: 'Norte',
-                    proveedor: 'Estación Shell',
-                    comprobante: null
-                }
-            ];
-        }
-    }
-
-    saveExpensesToStorage() {
-        localStorage.setItem('flota_expenses', JSON.stringify(this.expenses));
-    }
-
-    loadExpenses() {
-        this.renderExpensesTable(this.expenses);
-    }
-
-    filterExpenses() {
-        const typeFilter = document.getElementById('expenseTypeFilter').value;
-        const monthFilter = document.getElementById('expenseMonthFilter').value;
-
-        let filteredExpenses = this.expenses;
-
-        if (typeFilter) {
-            filteredExpenses = filteredExpenses.filter(expense => expense.tipo === typeFilter);
-        }
-
-        if (monthFilter) {
-            filteredExpenses = filteredExpenses.filter(expense => 
-                expense.fecha.startsWith(monthFilter)
-            );
-        }
-
-        this.renderExpensesTable(filteredExpenses);
-    }
-
-    renderExpensesTable(expenses) {
+    renderExpensesTable(expenses = this.expenses) {
         const tableBody = document.getElementById('expensesTableBody');
         if (!tableBody) return;
 
@@ -87,6 +50,9 @@ class ExpensesSystem {
                     <td colspan="8" class="empty-state">
                         <i class="fas fa-receipt"></i>
                         <p>No hay gastos registrados</p>
+                        <button class="btn-primary" onclick="showExpenseForm()">
+                            <i class="fas fa-plus"></i> Registrar Primer Gasto
+                        </button>
                     </td>
                 </tr>
             `;
@@ -96,8 +62,8 @@ class ExpensesSystem {
         tableBody.innerHTML = expenses.map(expense => `
             <tr>
                 <td>${new Date(expense.fecha).toLocaleDateString()}</td>
-                <td>${expense.tipo}</td>
-                <td>$${expense.monto.toLocaleString()}</td>
+                <td><span class="status-badge">${expense.tipo}</span></td>
+                <td><strong>$${expense.monto.toLocaleString()}</strong></td>
                 <td>${expense.placa}</td>
                 <td>${expense.regional}</td>
                 <td>${expense.proveedor}</td>
@@ -108,8 +74,8 @@ class ExpensesSystem {
                     }
                 </td>
                 <td>
-                    <button class="btn-action btn-edit" onclick="expensesSystem.viewExpense(${expense.id})" title="Ver Detalles">
-                        <i class="fas fa-eye"></i>
+                    <button class="btn-action btn-edit" onclick="expensesSystem.editExpense(${expense.id})" title="Editar">
+                        <i class="fas fa-edit"></i>
                     </button>
                     <button class="btn-action btn-delete" onclick="expensesSystem.deleteExpense(${expense.id})" title="Eliminar">
                         <i class="fas fa-trash"></i>
@@ -119,22 +85,50 @@ class ExpensesSystem {
         `).join('');
     }
 
-    showExpenseForm() {
-        const vehicles = window.vehiclesSystem ? window.vehiclesSystem.vehicles : [];
+    filterExpenses() {
+        const typeFilter = document.getElementById('expenseTypeFilter');
+        const monthFilter = document.getElementById('expenseMonthFilter');
+
+        let filteredExpenses = this.expenses;
+
+        if (typeFilter && typeFilter.value) {
+            filteredExpenses = filteredExpenses.filter(expense => expense.tipo === typeFilter.value);
+        }
+
+        if (monthFilter && monthFilter.value) {
+            filteredExpenses = filteredExpenses.filter(expense => 
+                expense.fecha.startsWith(monthFilter.value)
+            );
+        }
+
+        this.renderExpensesTable(filteredExpenses);
+    }
+
+    async showExpenseForm(expenseId = null) {
+        const expense = expenseId ? this.expenses.find(e => e.id === expenseId) : null;
+        const vehicles = await database.getVehicles();
         
+        if (vehicles.length === 0) {
+            alert('❌ Primero debe registrar al menos un vehículo');
+            return;
+        }
+
         const formContent = `
             <form id="expenseForm" onsubmit="expensesSystem.handleExpenseSubmit(event)">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="expenseFecha">Fecha *</label>
-                        <input type="date" id="expenseFecha" required>
+                        <input type="date" id="expenseFecha" 
+                               value="${expense ? expense.fecha : new Date().toISOString().split('T')[0]}" required>
                     </div>
                     <div class="form-group">
                         <label for="expenseTipo">Tipo de Gasto *</label>
                         <select id="expenseTipo" required>
                             <option value="">Seleccionar tipo</option>
                             ${this.expenseTypes.map(type => `
-                                <option value="${type}">${type}</option>
+                                <option value="${type}" ${expense && expense.tipo === type ? 'selected' : ''}>
+                                    ${type}
+                                </option>
                             `).join('')}
                         </select>
                     </div>
@@ -142,14 +136,19 @@ class ExpensesSystem {
                 <div class="form-row">
                     <div class="form-group">
                         <label for="expenseMonto">Monto *</label>
-                        <input type="number" id="expenseMonto" step="0.01" required>
+                        <input type="number" id="expenseMonto" step="0.01" 
+                               value="${expense ? expense.monto : ''}" required 
+                               placeholder="0.00">
                     </div>
                     <div class="form-group">
                         <label for="expensePlaca">Vehículo *</label>
                         <select id="expensePlaca" required>
                             <option value="">Seleccionar vehículo</option>
                             ${vehicles.map(vehicle => `
-                                <option value="${vehicle.placa}">${vehicle.placa}</option>
+                                <option value="${vehicle.placa}" data-id="${vehicle.id}" 
+                                        ${expense && expense.placa === vehicle.placa ? 'selected' : ''}>
+                                    ${vehicle.placa} - ${vehicle.marca} ${vehicle.modelo}
+                                </option>
                             `).join('')}
                         </select>
                     </div>
@@ -158,110 +157,120 @@ class ExpensesSystem {
                     <div class="form-group">
                         <label for="expenseRegional">Regional *</label>
                         <select id="expenseRegional" required>
-                            <option value="Norte">Norte</option>
-                            <option value="Sur">Sur</option>
-                            <option value="Centro">Centro</option>
+                            <option value="Norte" ${expense && expense.regional === 'Norte' ? 'selected' : ''}>Norte</option>
+                            <option value="Sur" ${expense && expense.regional === 'Sur' ? 'selected' : ''}>Sur</option>
+                            <option value="Centro" ${expense && expense.regional === 'Centro' ? 'selected' : ''}>Centro</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label for="expenseProveedor">Proveedor *</label>
-                        <input type="text" id="expenseProveedor" required>
+                        <input type="text" id="expenseProveedor" 
+                               value="${expense ? expense.proveedor : ''}" required 
+                               placeholder="Nombre del proveedor">
                     </div>
                 </div>
                 <div class="form-group">
                     <label for="expenseComprobante">Comprobante (PDF/Imagen)</label>
-                    <input type="file" id="expenseComprobante" accept=".pdf,.jpg,.jpeg,.png">
+                    <input type="file" id="expenseComprobante" accept=".pdf,.jpg,.jpeg,.png"
+                           onchange="expensesSystem.handleFileSelect(event)">
+                    <small class="file-info" id="fileInfo"></small>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
-                    <button type="submit" class="btn-primary">Registrar Gasto</button>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> ${expense ? 'Actualizar' : 'Guardar'} Gasto
+                    </button>
                 </div>
+                <input type="hidden" id="expenseId" value="${expense ? expense.id : ''}">
             </form>
         `;
 
-        showModal('Registrar Nuevo Gasto', formContent);
-        
-        // Establecer fecha actual por defecto
-        document.getElementById('expenseFecha').value = new Date().toISOString().split('T')[0];
+        showModal(expense ? 'Editar Gasto' : 'Nuevo Gasto', formContent);
     }
 
-    handleExpenseSubmit(event) {
-        event.preventDefault();
+    handleFileSelect(event) {
+        const file = event.target.files[0];
+        const fileInfo = document.getElementById('fileInfo');
         
-        const formData = {
-            id: Date.now(),
-            fecha: document.getElementById('expenseFecha').value,
-            tipo: document.getElementById('expenseTipo').value,
-            monto: parseFloat(document.getElementById('expenseMonto').value),
-            placa: document.getElementById('expensePlaca').value,
-            regional: document.getElementById('expenseRegional').value,
-            proveedor: document.getElementById('expenseProveedor').value,
-            comprobante: null // En una implementación real, aquí se manejaría el archivo
-        };
-
-        this.expenses.push(formData);
-        this.saveExpensesToStorage();
-        this.loadExpenses();
-        closeModal();
-        
-        alert('Gasto registrado exitosamente');
-    }
-
-    viewExpense(expenseId) {
-        const expense = this.expenses.find(e => e.id === expenseId);
-        if (!expense) return;
-
-        const content = `
-            <div class="expense-details">
-                <h4>Detalles del Gasto</h4>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Fecha:</label>
-                        <p>${new Date(expense.fecha).toLocaleDateString()}</p>
-                    </div>
-                    <div class="form-group">
-                        <label>Tipo:</label>
-                        <p>${expense.tipo}</p>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Monto:</label>
-                        <p>$${expense.monto.toLocaleString()}</p>
-                    </div>
-                    <div class="form-group">
-                        <label>Vehículo:</label>
-                        <p>${expense.placa}</p>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Regional:</label>
-                        <p>${expense.regional}</p>
-                    </div>
-                    <div class="form-group">
-                        <label>Proveedor:</label>
-                        <p>${expense.proveedor}</p>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Comprobante:</label>
-                    <p>${expense.comprobante ? 'Adjunto' : 'No adjunto'}</p>
-                </div>
-            </div>
-        `;
-
-        showModal('Detalles del Gasto', content);
-    }
-
-    deleteExpense(expenseId) {
-        if (confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
-            this.expenses = this.expenses.filter(expense => expense.id !== expenseId);
-            this.saveExpensesToStorage();
-            this.loadExpenses();
-            alert('Gasto eliminado exitosamente');
+        if (file) {
+            fileInfo.textContent = `Archivo seleccionado: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+            fileInfo.className = 'file-info text-success';
+        } else {
+            fileInfo.textContent = 'No se seleccionó ningún archivo';
+            fileInfo.className = 'file-info text-danger';
         }
     }
+
+    async handleExpenseSubmit(event) {
+        event.preventDefault();
+        
+        const placaSelect = document.getElementById('expensePlaca');
+        const selectedOption = placaSelect.options[placaSelect.selectedIndex];
+        
+        const formData = {
+            vehicleId: parseInt(selectedOption.getAttribute('data-id')),
+            placa: placaSelect.value,
+            tipo: document.getElementById('expenseTipo').value,
+            monto: parseFloat(document.getElementById('expenseMonto').value),
+            fecha: document.getElementById('expenseFecha').value,
+            regional: document.getElementById('expenseRegional').value,
+            proveedor: document.getElementById('expenseProveedor').value,
+            comprobante: null // En una implementación real, procesarías el archivo aquí
+        };
+
+        try {
+            const expenseId = document.getElementById('expenseId').value;
+            
+            if (expenseId) {
+                // Actualizar gasto existente
+                await database.updateExpense(parseInt(expenseId), formData);
+                this.showSuccess('Gasto actualizado exitosamente');
+            } else {
+                // Nuevo gasto
+                await database.createExpense(formData);
+                this.showSuccess('Gasto registrado exitosamente');
+            }
+
+            await this.loadExpenses();
+            closeModal();
+            
+        } catch (error) {
+            console.error('Error guardando gasto:', error);
+            this.showError('Error al guardar el gasto: ' + error.message);
+        }
+    }
+
+    async editExpense(expenseId) {
+        await this.showExpenseForm(expenseId);
+    }
+
+    async deleteExpense(expenseId) {
+        if (!confirm('¿Estás seguro de que quieres eliminar este gasto? Esta acción no se puede deshacer.')) {
+            return;
+        }
+
+        try {
+            await database.deleteExpense(expenseId);
+            await this.loadExpenses();
+            this.showSuccess('Gasto eliminado exitosamente');
+        } catch (error) {
+            console.error('Error eliminando gasto:', error);
+            this.showError('Error al eliminar el gasto');
+        }
+    }
+
+    showSuccess(message) {
+        alert('✅ ' + message);
+    }
+
+    showError(message) {
+        alert('❌ ' + message);
+    }
+}
+
+// Funciones globales
+function showExpenseForm() {
+    window.expensesSystem.showExpenseForm();
 }
 
 // Inicializar sistema de gastos
