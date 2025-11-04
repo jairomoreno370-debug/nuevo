@@ -3,127 +3,236 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Gestión de Flota Vehicular</title>
+    <meta name="description" content="Sistema de Gestión de Flota Vehicular - Control y administración de vehículos, mantenimiento y gastos">
+    <meta name="keywords" content="flota vehicular, gestión, mantenimiento, vehículos, gastos, reportes">
+    <meta name="author" content="Sistema de Gestión de Flota">
+    
+    <title>Sistema de Gestión de Plantas Móviles</title>
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="css/style.css" as="style">
+    <link rel="preload" href="css/dashboard.css" as="style">
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" as="style">
+    
+    <!-- CSS -->
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/dashboard.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Dexie.js para base de datos -->
-    <script src="https://unpkg.com/dexie@3.2.1/dist/dexie.js"></script>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚛</text></svg>">
 </head>
 <body>
     <!-- Sistema de Login -->
-    <div id="loginSystem" class="login-container">
+    <div id="loginSystem" class="login-container" role="main" aria-label="Sistema de autenticación">
         <div class="login-form">
-            <div class="logo">
-                <i class="fas fa-truck-moving"></i>
-                <h2>Gestión de Flota</h2>
+            <div class="logo" role="banner">
+                <i class="fas fa-truck-moving" aria-hidden="true"></i>
+                <h1>Sistema de Gestión de Flota</h1>
             </div>
-            <form id="loginForm">
+            
+            <form id="loginForm" aria-labelledby="login-heading">
+                <h2 id="login-heading" class="sr-only">Iniciar Sesión</h2>
+                
                 <div class="form-group">
-                    <label for="username">Usuario:</label>
-                    <input type="text" id="username" name="username" required>
+                    <label for="username">
+                        <i class="fas fa-user" aria-hidden="true"></i>
+                        Usuario:
+                    </label>
+                    <input type="text" id="username" name="username" required 
+                           autocomplete="username"
+                           aria-required="true"
+                           placeholder="Ingrese su usuario">
                 </div>
+                
                 <div class="form-group">
-                    <label for="password">Contraseña:</label>
-                    <input type="password" id="password" name="password" required>
+                    <label for="password">
+                        <i class="fas fa-lock" aria-hidden="true"></i>
+                        Contraseña:
+                    </label>
+                    <input type="password" id="password" name="password" required 
+                           autocomplete="current-password"
+                           aria-required="true"
+                           placeholder="Ingrese su contraseña">
                 </div>
-                <button type="submit" class="btn-primary">Iniciar Sesión</button>
+                
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-sign-in-alt" aria-hidden="true"></i>
+                    Iniciar Sesión
+                </button>
             </form>
-            <div class="demo-accounts">
-                <p><strong>Cuentas de demostración:</strong></p>
-                <p>Admin: admin / admin123</p>
-                <p>Operador: operador / operador123</p>
-                <p>Invitado: invitado / invitado123</p>
+            
+            <div class="demo-accounts" role="complementary" aria-label="Cuentas de demostración">
+                <h3>Cuentas de demostración:</h3>
+                <div class="account-list">
+                    <div class="account-item">
+                        <strong>Administrador:</strong> admin / admin123
+                    </div>
+                    <div class="account-item">
+                        <strong>Operador:</strong> operador / operador123
+                    </div>
+                    <div class="account-item">
+                        <strong>Invitado:</strong> invitado / invitado123
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Sistema Principal -->
-    <div id="mainSystem" class="main-system hidden">
+    <div id="mainSystem" class="main-system hidden" aria-hidden="true">
         <!-- Header -->
-        <header class="header">
+        <header class="header" role="banner">
             <div class="header-left">
-                <button id="sidebarToggle" class="sidebar-toggle">
-                    <i class="fas fa-bars"></i>
+                <button id="sidebarToggle" class="sidebar-toggle" 
+                        aria-label="Alternar menú lateral"
+                        aria-expanded="false"
+                        aria-controls="sidebar">
+                    <i class="fas fa-bars" aria-hidden="true"></i>
                 </button>
-                <h1><i class="fas fa-truck-moving"></i> Gestión de Flota</h1>
+                <h1>
+                    <i class="fas fa-truck-moving" aria-hidden="true"></i> 
+                    Gestión de Flota Vehicular
+                </h1>
             </div>
+            
             <div class="header-right">
                 <div class="user-menu">
-                    <button class="user-dropdown-btn">
+                    <button class="user-dropdown-btn" 
+                            aria-label="Menú de usuario"
+                            aria-expanded="false"
+                            aria-controls="userDropdown">
                         <span id="currentUser" class="user-info"></span>
                         <span id="userRole" class="user-role"></span>
-                        <i class="fas fa-chevron-down"></i>
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
                     </button>
-                    <div class="user-dropdown-content" id="userDropdown">
-                        <button class="user-dropdown-item" onclick="authSystem.showProfilePasswordChange()">
-                            <i class="fas fa-key"></i> Cambiar Contraseña
+                    <div class="user-dropdown-content" id="userDropdown" role="menu">
+                        <button class="user-dropdown-item" 
+                                onclick="authSystem.showProfilePasswordChange()"
+                                role="menuitem">
+                            <i class="fas fa-key" aria-hidden="true"></i> 
+                            Cambiar Contraseña
                         </button>
-                        <button class="user-dropdown-item" onclick="authSystem.handleLogout()">
-                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                        <button class="user-dropdown-item" 
+                                onclick="authSystem.handleLogout()"
+                                role="menuitem">
+                            <i class="fas fa-sign-out-alt" aria-hidden="true"></i> 
+                            Cerrar Sesión
                         </button>
                     </div>
                 </div>
             </div>
         </header>
 
-        <!-- Sidebar -->
-        <nav id="sidebar" class="sidebar">
+        <!-- Sidebar Navigation -->
+        <nav id="sidebar" class="sidebar" role="navigation" aria-label="Navegación principal">
             <ul class="sidebar-menu">
-                <li><a href="#dashboard" class="menu-item active" data-module="dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="#vehicles" class="menu-item" data-module="vehicles"><i class="fas fa-car"></i> Vehículos</a></li>
-                <li><a href="#maintenance" class="menu-item" data-module="maintenance"><i class="fas fa-tools"></i> Mantenimiento</a></li>
-                <li><a href="#expenses" class="menu-item" data-module="expenses"><i class="fas fa-money-bill-wave"></i> Gastos</a></li>
-                <li><a href="#reports" class="menu-item" data-module="reports"><i class="fas fa-chart-bar"></i> Reportes</a></li>
-                <li id="adminMenu" class="hidden"><a href="#admin" class="menu-item" data-module="admin"><i class="fas fa-cog"></i> Administración</a></li>
+                <li>
+                    <a href="#dashboard" class="menu-item active" 
+                       data-module="dashboard"
+                       role="tab"
+                       aria-selected="true">
+                        <i class="fas fa-tachometer-alt" aria-hidden="true"></i> 
+                        Dashboard
+                    </a>
+                </li>
+                <li>
+                    <a href="#vehicles" class="menu-item" 
+                       data-module="vehicles"
+                       role="tab"
+                       aria-selected="false">
+                        <i class="fas fa-car" aria-hidden="true"></i> 
+                        Vehículos
+                    </a>
+                </li>
+                <li>
+                    <a href="#maintenance" class="menu-item" 
+                       data-module="maintenance"
+                       role="tab"
+                       aria-selected="false">
+                        <i class="fas fa-tools" aria-hidden="true"></i> 
+                        Mantenimiento
+                    </a>
+                </li>
+                <li>
+                    <a href="#expenses" class="menu-item" 
+                       data-module="expenses"
+                       role="tab"
+                       aria-selected="false">
+                        <i class="fas fa-money-bill-wave" aria-hidden="true"></i> 
+                        Gastos
+                    </a>
+                </li>
+                <li>
+                    <a href="#reports" class="menu-item" 
+                       data-module="reports"
+                       role="tab"
+                       aria-selected="false">
+                        <i class="fas fa-chart-bar" aria-hidden="true"></i> 
+                        Reportes
+                    </a>
+                </li>
+                <li id="adminMenu" class="hidden">
+                    <a href="#admin" class="menu-item" 
+                       data-module="admin"
+                       role="tab"
+                       aria-selected="false">
+                        <i class="fas fa-cog" aria-hidden="true"></i> 
+                        Administración
+                    </a>
+                </li>
             </ul>
         </nav>
 
         <!-- Main Content -->
-        <main class="main-content">
+        <main class="main-content" role="main">
             <!-- Dashboard Module -->
-            <div id="dashboard" class="module active">
+            <section id="dashboard" class="module active" role="tabpanel" aria-labelledby="dashboard-tab">
                 <div class="module-header">
                     <h2>Dashboard Principal</h2>
                     <div class="header-actions">
                         <button class="btn-secondary" onclick="generateQuickReport()">
-                            <i class="fas fa-download"></i> Reporte Rápido
+                            <i class="fas fa-download" aria-hidden="true"></i> 
+                            Reporte Rápido
                         </button>
                     </div>
                 </div>
                 
-                <div class="stats-grid">
-                    <div class="stat-card">
+                <!-- Statistics Grid -->
+                <div class="stats-grid" role="region" aria-label="Estadísticas del sistema">
+                    <div class="stat-card" role="article">
                         <div class="stat-icon">
-                            <i class="fas fa-car"></i>
+                            <i class="fas fa-car" aria-hidden="true"></i>
                         </div>
                         <div class="stat-info">
                             <h3 id="totalVehicles">0</h3>
                             <p>Vehículos Registrados</p>
                         </div>
                     </div>
-                    <div class="stat-card">
+                    
+                    <div class="stat-card" role="article">
                         <div class="stat-icon warning">
-                            <i class="fas fa-exclamation-triangle"></i>
+                            <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
                         </div>
                         <div class="stat-info">
                             <h3 id="openIssues">0</h3>
                             <p>Fallas Abiertas</p>
                         </div>
                     </div>
-                    <div class="stat-card">
+                    
+                    <div class="stat-card" role="article">
                         <div class="stat-icon success">
-                            <i class="fas fa-check-circle"></i>
+                            <i class="fas fa-check-circle" aria-hidden="true"></i>
                         </div>
                         <div class="stat-info">
                             <h3 id="resolvedIssues">0</h3>
                             <p>Fallas Resueltas</p>
                         </div>
                     </div>
-                    <div class="stat-card">
+                    
+                    <div class="stat-card" role="article">
                         <div class="stat-icon danger">
-                            <i class="fas fa-money-bill-wave"></i>
+                            <i class="fas fa-money-bill-wave" aria-hidden="true"></i>
                         </div>
                         <div class="stat-info">
                             <h3 id="totalExpenses">$0</h3>
@@ -132,47 +241,62 @@
                     </div>
                 </div>
 
+                <!-- Charts Section -->
                 <div class="charts-grid">
-                    <div class="chart-container">
+                    <div class="chart-container" role="region" aria-label="Gráfico de presupuesto vs ejecutado">
                         <h3>Presupuesto vs Ejecutado</h3>
-                        <canvas id="budgetChart"></canvas>
+                        <canvas id="budgetChart" aria-label="Gráfico comparativo de presupuesto y gastos ejecutados"></canvas>
                     </div>
-                    <div class="chart-container">
+                    
+                    <div class="chart-container" role="region" aria-label="Gráfico de fallas por componente">
                         <h3>Fallas por Componente</h3>
-                        <canvas id="failuresChart"></canvas>
+                        <canvas id="failuresChart" aria-label="Distribución de fallas reportadas por componente"></canvas>
                     </div>
-                    <div class="chart-container">
+                    
+                    <div class="chart-container" role="region" aria-label="Gráfico de gastos por tipo">
                         <h3>Gastos por Tipo</h3>
-                        <canvas id="expensesChart"></canvas>
+                        <canvas id="expensesChart" aria-label="Distribución de gastos por categoría"></canvas>
                     </div>
-                    <div class="chart-container">
+                    
+                    <div class="chart-container" role="region" aria-label="Gráfico de fallas mensuales">
                         <h3>Fallas por Mes</h3>
-                        <canvas id="monthlyFailuresChart"></canvas>
+                        <canvas id="monthlyFailuresChart" aria-label="Evolución mensual de fallas reportadas"></canvas>
                     </div>
                 </div>
 
-                <div class="recent-activity">
+                <!-- Recent Activity -->
+                <section class="recent-activity" role="region" aria-label="Actividad reciente">
                     <h3>Actividad Reciente</h3>
                     <div id="recentActivity" class="activity-list">
                         <!-- Las actividades se cargarán dinámicamente -->
+                        <div class="activity-placeholder">
+                            <i class="fas fa-sync fa-spin" aria-hidden="true"></i>
+                            <p>Cargando actividad reciente...</p>
+                        </div>
                     </div>
-                </div>
-            </div>
+                </section>
+            </section>
 
             <!-- Vehicles Module -->
-            <div id="vehicles" class="module">
+            <section id="vehicles" class="module" role="tabpanel" aria-labelledby="vehicles-tab" hidden>
                 <div class="module-header">
                     <h2>Gestión de Vehículos</h2>
                     <div class="header-actions">
                         <button class="btn-primary" onclick="showVehicleForm()">
-                            <i class="fas fa-plus"></i> Nuevo Vehículo
+                            <i class="fas fa-plus" aria-hidden="true"></i> 
+                            Nuevo Vehículo
                         </button>
                     </div>
                 </div>
 
-                <div class="filters">
-                    <input type="text" id="vehicleSearch" placeholder="Buscar por placa, marca, modelo..." class="search-input">
-                    <select id="regionalFilter" class="filter-select">
+                <!-- Filters -->
+                <div class="filters" role="search" aria-label="Filtros de vehículos">
+                    <input type="text" id="vehicleSearch" 
+                           placeholder="Buscar por placa, marca, modelo..." 
+                           class="search-input"
+                           aria-label="Buscar vehículos">
+                    
+                    <select id="regionalFilter" class="filter-select" aria-label="Filtrar por regional">
                         <option value="">Todas las Regionales</option>
                         <option value="Norte">Norte</option>
                         <option value="Sur">Sur</option>
@@ -180,56 +304,84 @@
                     </select>
                 </div>
 
-                <div class="table-container">
-                    <table id="vehiclesTable" class="data-table">
+                <!-- Vehicles Table -->
+                <div class="table-container" role="region" aria-label="Lista de vehículos">
+                    <table id="vehiclesTable" class="data-table" aria-label="Tabla de vehículos registrados">
                         <thead>
                             <tr>
-                                <th>Placa</th>
-                                <th>Marca</th>
-                                <th>Modelo</th>
-                                <th>Año</th>
-                                <th>Regional</th>
-                                <th>Capacidad</th>
-                                <th>Odómetro</th>
-                                <th>Acciones</th>
+                                <th scope="col">Placa</th>
+                                <th scope="col">Marca</th>
+                                <th scope="col">Modelo</th>
+                                <th scope="col">Año</th>
+                                <th scope="col">Regional</th>
+                                <th scope="col">Capacidad</th>
+                                <th scope="col">Odómetro</th>
+                                <th scope="col">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="vehiclesTableBody">
                             <!-- Los vehículos se cargarán dinámicamente -->
+                            <tr>
+                                <td colspan="8" class="loading-state">
+                                    <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+                                    Cargando vehículos...
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </section>
 
             <!-- Maintenance Module -->
-            <div id="maintenance" class="module">
+            <section id="maintenance" class="module" role="tabpanel" aria-labelledby="maintenance-tab" hidden>
                 <div class="module-header">
                     <h2>Gestión de Mantenimiento</h2>
                     <div class="header-actions">
                         <button class="btn-primary" onclick="showFailureForm()">
-                            <i class="fas fa-plus"></i> Registrar Falla
+                            <i class="fas fa-plus" aria-hidden="true"></i> 
+                            Registrar Falla
                         </button>
                     </div>
                 </div>
 
-                <div class="tabs">
-                    <button class="tab-button active" data-tab="openFailures">Fallas Abiertas</button>
-                    <button class="tab-button" data-tab="inProgressFailures">En Proceso</button>
-                    <button class="tab-button" data-tab="resolvedFailures">Resueltas</button>
+                <!-- Maintenance Tabs -->
+                <div class="tabs" role="tablist" aria-label="Estados de fallas">
+                    <button class="tab-button active" 
+                            data-tab="openFailures"
+                            role="tab"
+                            aria-selected="true"
+                            aria-controls="openFailures">
+                        Fallas Abiertas
+                    </button>
+                    <button class="tab-button" 
+                            data-tab="inProgressFailures"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="inProgressFailures">
+                        En Proceso
+                    </button>
+                    <button class="tab-button" 
+                            data-tab="resolvedFailures"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="resolvedFailures">
+                        Resueltas
+                    </button>
                 </div>
 
+                <!-- Tab Content -->
                 <div class="tab-content">
-                    <div id="openFailures" class="tab-pane active">
+                    <div id="openFailures" class="tab-pane active" role="tabpanel" aria-labelledby="open-failures-tab">
                         <div class="table-container">
-                            <table class="data-table">
+                            <table class="data-table" aria-label="Fallas abiertas">
                                 <thead>
                                     <tr>
-                                        <th>Placa</th>
-                                        <th>Componente</th>
-                                        <th>Fecha Falla</th>
-                                        <th>Prioridad</th>
-                                        <th>Descripción</th>
-                                        <th>Acciones</th>
+                                        <th scope="col">Placa</th>
+                                        <th scope="col">Componente</th>
+                                        <th scope="col">Fecha Falla</th>
+                                        <th scope="col">Prioridad</th>
+                                        <th scope="col">Descripción</th>
+                                        <th scope="col">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="openFailuresTableBody">
@@ -238,17 +390,18 @@
                             </table>
                         </div>
                     </div>
-                    <div id="inProgressFailures" class="tab-pane">
+                    
+                    <div id="inProgressFailures" class="tab-pane" role="tabpanel" aria-labelledby="in-progress-failures-tab" hidden>
                         <div class="table-container">
-                            <table class="data-table">
+                            <table class="data-table" aria-label="Fallas en proceso">
                                 <thead>
                                     <tr>
-                                        <th>Placa</th>
-                                        <th>Componente</th>
-                                        <th>Fecha Falla</th>
-                                        <th>Prioridad</th>
-                                        <th>Descripción</th>
-                                        <th>Acciones</th>
+                                        <th scope="col">Placa</th>
+                                        <th scope="col">Componente</th>
+                                        <th scope="col">Fecha Falla</th>
+                                        <th scope="col">Prioridad</th>
+                                        <th scope="col">Descripción</th>
+                                        <th scope="col">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="inProgressFailuresTableBody">
@@ -257,17 +410,18 @@
                             </table>
                         </div>
                     </div>
-                    <div id="resolvedFailures" class="tab-pane">
+                    
+                    <div id="resolvedFailures" class="tab-pane" role="tabpanel" aria-labelledby="resolved-failures-tab" hidden>
                         <div class="table-container">
-                            <table class="data-table">
+                            <table class="data-table" aria-label="Fallas resueltas">
                                 <thead>
                                     <tr>
-                                        <th>Placa</th>
-                                        <th>Componente</th>
-                                        <th>Fecha Falla</th>
-                                        <th>Prioridad</th>
-                                        <th>Descripción</th>
-                                        <th>Acciones</th>
+                                        <th scope="col">Placa</th>
+                                        <th scope="col">Componente</th>
+                                        <th scope="col">Fecha Falla</th>
+                                        <th scope="col">Prioridad</th>
+                                        <th scope="col">Descripción</th>
+                                        <th scope="col">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="resolvedFailuresTableBody">
@@ -277,21 +431,23 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Expenses Module -->
-            <div id="expenses" class="module">
+            <section id="expenses" class="module" role="tabpanel" aria-labelledby="expenses-tab" hidden>
                 <div class="module-header">
                     <h2>Gestión de Gastos</h2>
                     <div class="header-actions">
                         <button class="btn-primary" onclick="showExpenseForm()">
-                            <i class="fas fa-plus"></i> Registrar Gasto
+                            <i class="fas fa-plus" aria-hidden="true"></i> 
+                            Registrar Gasto
                         </button>
                     </div>
                 </div>
 
-                <div class="filters">
-                    <select id="expenseTypeFilter" class="filter-select">
+                <!-- Filters -->
+                <div class="filters" role="search" aria-label="Filtros de gastos">
+                    <select id="expenseTypeFilter" class="filter-select" aria-label="Filtrar por tipo de gasto">
                         <option value="">Todos los Tipos</option>
                         <option value="Mantenimiento Correctivo">Mantenimiento Correctivo</option>
                         <option value="Combustible">Combustible</option>
@@ -299,21 +455,25 @@
                         <option value="Documentación/Seguros">Documentación/Seguros</option>
                         <option value="Peajes/Viáticos">Peajes/Viáticos</option>
                     </select>
-                    <input type="month" id="expenseMonthFilter" class="filter-select">
+                    
+                    <input type="month" id="expenseMonthFilter" 
+                           class="filter-select"
+                           aria-label="Filtrar por mes">
                 </div>
 
-                <div class="table-container">
-                    <table id="expensesTable" class="data-table">
+                <!-- Expenses Table -->
+                <div class="table-container" role="region" aria-label="Lista de gastos">
+                    <table id="expensesTable" class="data-table" aria-label="Tabla de gastos registrados">
                         <thead>
                             <tr>
-                                <th>Fecha</th>
-                                <th>Tipo</th>
-                                <th>Monto</th>
-                                <th>Vehículo</th>
-                                <th>Regional</th>
-                                <th>Proveedor</th>
-                                <th>Comprobante</th>
-                                <th>Acciones</th>
+                                <th scope="col">Fecha</th>
+                                <th scope="col">Tipo</th>
+                                <th scope="col">Monto</th>
+                                <th scope="col">Vehículo</th>
+                                <th scope="col">Regional</th>
+                                <th scope="col">Proveedor</th>
+                                <th scope="col">Comprobante</th>
+                                <th scope="col">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="expensesTableBody">
@@ -321,95 +481,137 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </section>
 
             <!-- Reports Module -->
-            <div id="reports" class="module">
+            <section id="reports" class="module" role="tabpanel" aria-labelledby="reports-tab" hidden>
                 <div class="module-header">
                     <h2>Reportes y Análisis</h2>
                     <div class="header-actions">
                         <button class="btn-primary" onclick="generateComprehensiveReport()">
-                            <i class="fas fa-file-pdf"></i> Generar Reporte Completo
+                            <i class="fas fa-file-pdf" aria-hidden="true"></i> 
+                            Generar Reporte Completo
                         </button>
                     </div>
                 </div>
 
-                <div class="reports-grid">
-                    <div class="report-card" onclick="showReport('budget')">
-                        <i class="fas fa-chart-line"></i>
+                <!-- Reports Grid -->
+                <div class="reports-grid" role="navigation" aria-label="Tipos de reportes disponibles">
+                    <div class="report-card" onclick="showReport('budget')" role="button" tabindex="0">
+                        <i class="fas fa-chart-line" aria-hidden="true"></i>
                         <h3>Presupuesto vs Ejecutado</h3>
                         <p>Comparativa mensual por regional</p>
                     </div>
-                    <div class="report-card" onclick="showReport('failures')">
-                        <i class="fas fa-exclamation-triangle"></i>
+                    
+                    <div class="report-card" onclick="showReport('failures')" role="button" tabindex="0">
+                        <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
                         <h3>Análisis de Fallas</h3>
                         <p>Estadísticas de fallas por componente</p>
                     </div>
-                    <div class="report-card" onclick="showReport('expenses')">
-                        <i class="fas fa-money-bill-wave"></i>
+                    
+                    <div class="report-card" onclick="showReport('expenses')" role="button" tabindex="0">
+                        <i class="fas fa-money-bill-wave" aria-hidden="true"></i>
                         <h3>Gastos Detallados</h3>
                         <p>Desglose por tipo y vehículo</p>
                     </div>
-                    <div class="report-card" onclick="showReport('maintenance')">
-                        <i class="fas fa-tools"></i>
+                    
+                    <div class="report-card" onclick="showReport('maintenance')" role="button" tabindex="0">
+                        <i class="fas fa-tools" aria-hidden="true"></i>
                         <h3>Mantenimiento</h3>
                         <p>Historial y costos de mantenimiento</p>
                     </div>
                 </div>
 
-                <div id="reportContent" class="report-content">
+                <!-- Report Content -->
+                <div id="reportContent" class="report-content" role="region" aria-label="Contenido del reporte">
                     <!-- El contenido del reporte se cargará dinámicamente -->
+                    <div class="report-placeholder">
+                        <i class="fas fa-chart-bar" aria-hidden="true"></i>
+                        <h3>Seleccione un tipo de reporte para visualizar</h3>
+                        <p>Elija una de las opciones anteriores para generar y ver el reporte correspondiente</p>
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <!-- Admin Module -->
-            <div id="admin" class="module">
+            <section id="admin" class="module" role="tabpanel" aria-labelledby="admin-tab" hidden>
                 <div class="module-header">
                     <h2>Administración del Sistema</h2>
                 </div>
 
-                <div class="admin-tabs">
-                    <button class="admin-tab-button active" data-tab="budgetConfig">Presupuesto</button>
-                    <button class="admin-tab-button" data-tab="userManagement">Usuarios</button>
-                    <button class="admin-tab-button" data-tab="systemConfig">Configuración</button>
+                <!-- Admin Tabs -->
+                <div class="admin-tabs" role="tablist" aria-label="Secciones de administración">
+                    <button class="admin-tab-button active" 
+                            data-tab="budgetConfig"
+                            role="tab"
+                            aria-selected="true"
+                            aria-controls="budgetConfig">
+                        Presupuesto
+                    </button>
+                    <button class="admin-tab-button" 
+                            data-tab="userManagement"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="userManagement">
+                        Usuarios
+                    </button>
+                    <button class="admin-tab-button" 
+                            data-tab="systemConfig"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="systemConfig">
+                        Configuración
+                    </button>
                 </div>
 
+                <!-- Admin Tab Content -->
                 <div class="admin-tab-content">
-                    <div id="budgetConfig" class="admin-tab-pane active">
+                    <!-- Budget Configuration -->
+                    <div id="budgetConfig" class="admin-tab-pane active" role="tabpanel" aria-labelledby="budget-config-tab">
                         <h3>Configuración de Presupuesto</h3>
-                        <form id="budgetForm" class="budget-form">
+                        
+                        <form id="budgetForm" class="budget-form" aria-label="Formulario de configuración de presupuesto">
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="budgetRegional">Regional:</label>
-                                    <select id="budgetRegional" required>
+                                    <select id="budgetRegional" required aria-required="true">
                                         <option value="Norte">Norte</option>
                                         <option value="Sur">Sur</option>
                                         <option value="Centro">Centro</option>
                                     </select>
                                 </div>
+                                
                                 <div class="form-group">
                                     <label for="budgetMonth">Mes:</label>
-                                    <input type="month" id="budgetMonth" required>
+                                    <input type="month" id="budgetMonth" required aria-required="true">
                                 </div>
+                                
                                 <div class="form-group">
                                     <label for="budgetAmount">Monto Presupuestado:</label>
-                                    <input type="number" id="budgetAmount" step="0.01" required>
+                                    <input type="number" id="budgetAmount" step="0.01" required 
+                                           aria-required="true"
+                                           placeholder="0.00">
                                 </div>
                             </div>
-                            <button type="submit" class="btn-primary">Guardar Presupuesto</button>
+                            
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-save" aria-hidden="true"></i>
+                                Guardar Presupuesto
+                            </button>
                         </form>
 
-                        <div class="budget-list">
+                        <!-- Budget List -->
+                        <div class="budget-list" role="region" aria-label="Lista de presupuestos configurados">
                             <h4>Presupuestos Configurados</h4>
-                            <table class="data-table">
+                            <table class="data-table" aria-label="Tabla de presupuestos">
                                 <thead>
                                     <tr>
-                                        <th>Regional</th>
-                                        <th>Mes</th>
-                                        <th>Presupuesto</th>
-                                        <th>Ejecutado</th>
-                                        <th>Diferencia</th>
-                                        <th>Acciones</th>
+                                        <th scope="col">Regional</th>
+                                        <th scope="col">Mes</th>
+                                        <th scope="col">Presupuesto</th>
+                                        <th scope="col">Ejecutado</th>
+                                        <th scope="col">Diferencia</th>
+                                        <th scope="col">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="budgetTableBody">
@@ -419,21 +621,25 @@
                         </div>
                     </div>
 
-                    <div id="userManagement" class="admin-tab-pane">
+                    <!-- User Management -->
+                    <div id="userManagement" class="admin-tab-pane" role="tabpanel" aria-labelledby="user-management-tab" hidden>
                         <h3>Gestión de Usuarios</h3>
+                        
                         <button class="btn-primary" onclick="showUserForm()">
-                            <i class="fas fa-plus"></i> Nuevo Usuario
+                            <i class="fas fa-plus" aria-hidden="true"></i> 
+                            Nuevo Usuario
                         </button>
-                        <div class="table-container">
-                            <table class="data-table">
+                        
+                        <div class="table-container" role="region" aria-label="Lista de usuarios">
+                            <table class="data-table" aria-label="Tabla de usuarios del sistema">
                                 <thead>
                                     <tr>
-                                        <th>Usuario</th>
-                                        <th>Nombre</th>
-                                        <th>Rol</th>
-                                        <th>Estado</th>
-                                        <th>Último Acceso</th>
-                                        <th>Acciones</th>
+                                        <th scope="col">Usuario</th>
+                                        <th scope="col">Nombre</th>
+                                        <th scope="col">Rol</th>
+                                        <th scope="col">Estado</th>
+                                        <th scope="col">Último Acceso</th>
+                                        <th scope="col">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="usersTableBody">
@@ -443,13 +649,16 @@
                         </div>
                     </div>
 
-                    <div id="systemConfig" class="admin-tab-pane">
+                    <!-- System Configuration -->
+                    <div id="systemConfig" class="admin-tab-pane" role="tabpanel" aria-labelledby="system-config-tab" hidden>
                         <h3>Configuración del Sistema</h3>
-                        <form class="config-form">
+                        
+                        <form class="config-form" aria-label="Configuración general del sistema">
                             <div class="form-group">
                                 <label for="systemName">Nombre del Sistema:</label>
                                 <input type="text" id="systemName" value="Gestión de Flota Vehicular">
                             </div>
+                            
                             <div class="form-group">
                                 <label for="defaultRegional">Regional Predeterminada:</label>
                                 <select id="defaultRegional">
@@ -458,24 +667,31 @@
                                     <option value="Centro">Centro</option>
                                 </select>
                             </div>
+                            
                             <div class="form-group">
                                 <label for="maintenanceAlert">Alerta de Mantenimiento (días):</label>
                                 <input type="number" id="maintenanceAlert" value="7" min="1">
                             </div>
-                            <button type="submit" class="btn-primary">Guardar Configuración</button>
+                            
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-save" aria-hidden="true"></i>
+                                Guardar Configuración
+                            </button>
                         </form>
                     </div>
                 </div>
-            </div>
+            </section>
         </main>
     </div>
 
     <!-- Modal para formularios -->
-    <div id="modal" class="modal hidden">
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="modalTitle">Título del Modal</h3>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
+                <button class="modal-close" onclick="closeModal()" aria-label="Cerrar modal">
+                    &times;
+                </button>
             </div>
             <div class="modal-body">
                 <!-- El contenido del formulario se cargará dinámicamente -->
@@ -483,13 +699,29 @@
         </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="js/database.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/app.js"></script>
-    <script src="js/vehicles.js"></script>
-    <script src="js/maintenance.js"></script>
-    <script src="js/expenses.js"></script>
-    <script src="js/reports.js"></script>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden" aria-hidden="true">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+            <p>Cargando...</p>
+        </div>
+    </div>
+
+    <!-- Scripts (deferred for better performance) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/dexie@3.2.1/dist/dexie.js"></script>
+    
+    <script src="js/database.js" defer></script>
+    <script src="js/auth.js" defer></script>
+    <script src="js/app.js" defer></script>
+    <script src="js/vehicles.js" defer></script>
+    <script src="js/maintenance.js" defer></script>
+    <script src="js/expenses.js" defer></script>
+    <script src="js/reports.js" defer></script>
+
+    <!-- Hidden elements for screen readers -->
+    <div class="sr-only" aria-live="polite" aria-atomic="true">
+        <div id="liveRegion"></div>
+    </div>
 </body>
 </html>
