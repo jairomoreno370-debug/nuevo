@@ -1,16 +1,31 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Gestión de Flota Vehicular</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/dashboard.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Dexie.js para base de datos -->
-    <script src="https://unpkg.com/dexie@3.2.1/dist/dexie.js"></script>
-</head>
+<!-- Header -->
+<header class="header">
+    <div class="header-left">
+        <button id="sidebarToggle" class="sidebar-toggle">
+            <i class="fas fa-bars"></i>
+        </button>
+        <h1><i class="fas fa-truck-moving"></i> Gestión de Flota</h1>
+    </div>
+    <div class="header-right">
+        <div class="user-menu">
+            <button class="user-dropdown-btn">
+                <span id="currentUser" class="user-info"></span>
+                <span id="userRole" class="user-role"></span>
+                <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="user-dropdown-content" id="userDropdown">
+                <button class="user-dropdown-item" onclick="authSystem.showProfilePasswordChange()">
+                    <i class="fas fa-key"></i> Cambiar Contraseña
+                </button>
+                <button class="user-dropdown-item" onclick="authSystem.handleLogout()">
+                    <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                </button>
+            </div>
+        </div>
+    </div>
+</header>
 <body>
     <!-- [Todo el contenido existente se mantiene igual] -->
     
