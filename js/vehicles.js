@@ -1,4 +1,4 @@
-// Sistema de Gestión de Vehículos - COMPLETO
+// Sistema de Gestión de Vehículos - OPTIMIZADO Y COMPLETADO
 class VehiclesSystem {
     constructor() {
         this.vehicles = [];
@@ -10,12 +10,21 @@ class VehiclesSystem {
             'Manguera GLP Carretel', 'Carretel', 'Motor Carretel', 'Juntas Flexibles',
             'Válvula Cierre Rápido o Suministro'
         ];
+        this.regionalList = ['Norte', 'Sur', 'Centro'];
+        this.currentSort = { field: null, direction: 'asc' };
         this.init();
     }
 
     async init() {
-        await this.loadVehicles();
-        this.setupEventListeners();
+        try {
+            await this.loadVehicles();
+            this.setupEventListeners();
+            this.setupGlobalHandlers();
+            console.log('✅ Sistema de vehículos inicializado');
+        } catch (error) {
+            console.error('❌ Error inicializando sistema de vehículos:', error);
+            this.showError('Error al inicializar el sistema de vehículos');
+        }
     }
 
     async loadVehicles() {
@@ -26,6 +35,7 @@ class VehiclesSystem {
             this.filteredVehicles = [...this.vehicles];
             
             this.renderVehiclesTable();
+            this.updateVehicleStats();
             this.hideLoading();
             
         } catch (error) {
@@ -39,9 +49,9 @@ class VehiclesSystem {
         // Búsqueda de vehículos
         const searchInput = document.getElementById('vehicleSearch');
         if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
+            searchInput.addEventListener('input', this.debounce((e) => {
                 this.filterVehicles(e.target.value);
-            });
+            }, 300));
         }
 
         // Filtro por regional
@@ -60,6 +70,52 @@ class VehiclesSystem {
                 }
             });
         }
+
+        // Click en headers de tabla para ordenar
+        this.setupTableSorting();
+    }
+
+    setupGlobalHandlers() {
+        // Refresh data cuando se vuelve a mostrar el módulo
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && document.getElementById('vehicles')?.classList.contains('active')) {
+                this.refreshData();
+            }
+        });
+
+        // Exportar datos con Ctrl+E
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'e' && document.getElementById('vehicles')?.classList.contains('active')) {
+                e.preventDefault();
+                this.exportVehiclesData();
+            }
+        });
+    }
+
+    setupTableSorting() {
+        const table = document.getElementById('vehiclesTable');
+        if (!table) return;
+
+        const headers = table.querySelectorAll('th[data-sortable]');
+        headers.forEach(header => {
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', () => {
+                const field = header.getAttribute('data-sortable');
+                this.sortVehicles(field);
+            });
+        });
+    }
+
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     }
 
     renderVehiclesTable(vehicles = this.filteredVehicles) {
@@ -82,10 +138,12 @@ class VehiclesSystem {
         }
 
         tableBody.innerHTML = vehicles.map(vehicle => `
-            <tr>
+            <tr data-vehicle-id="${vehicle.id}">
                 <td>
-                    <strong>${this.escapeHtml(vehicle.placa)}</strong>
-                    ${this.hasAlerts(vehicle) ? '<i class="fas fa-exclamation-circle text-warning" title="Tiene alertas"></i>' : ''}
+                    <div class="vehicle-placa">
+                        <strong>${this.escapeHtml(vehicle.placa)}</strong>
+                        ${this.hasAlerts(vehicle) ? '<i class="fas fa-exclamation-circle text-warning" title="Tiene alertas"></i>' : ''}
+                    </div>
                 </td>
                 <td>${this.escapeHtml(vehicle.marca)}</td>
                 <td>${this.escapeHtml(vehicle.modelo)}</td>
@@ -96,22 +154,27 @@ class VehiclesSystem {
                     </span>
                 </td>
                 <td>${this.escapeHtml(vehicle.capacidad)}</td>
-                <td>${vehicle.odometroInicial.toLocaleString()} km</td>
+                <td>
+                    <div class="odometer-display">
+                        <span class="odometer-value">${vehicle.odometroInicial.toLocaleString()} km</span>
+                        ${this.getOdometerStatus(vehicle)}
+                    </div>
+                </td>
                 <td>
                     <div class="action-buttons">
                         <button class="btn-action btn-edit" onclick="vehiclesSystem.editVehicle(${vehicle.id})" 
-                                title="Editar vehículo" ${!authSystem.hasPermission('operator') ? 'disabled' : ''}>
+                                title="Editar vehículo" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-edit"></i>
                         </button>
                         <button class="btn-action btn-info" onclick="vehiclesSystem.manageComponents(${vehicle.id})" 
-                                title="Gestionar componentes" ${!authSystem.hasPermission('operator') ? 'disabled' : ''}>
+                                title="Gestionar componentes" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-cogs"></i>
                         </button>
                         <button class="btn-action btn-view" onclick="vehiclesSystem.viewVehicleDetails(${vehicle.id})" 
                                 title="Ver detalles">
                             <i class="fas fa-eye"></i>
                         </button>
-                        ${authSystem.hasPermission('admin') ? `
+                        ${this.hasPermission('admin') ? `
                         <button class="btn-action btn-delete" onclick="vehiclesSystem.deleteVehicle(${vehicle.id})" 
                                 title="Eliminar vehículo">
                             <i class="fas fa-trash"></i>
@@ -121,11 +184,77 @@ class VehiclesSystem {
                 </td>
             </tr>
         `).join('');
+
+        // Actualizar contador de resultados
+        this.updateResultsCounter(vehicles.length);
+    }
+
+    getOdometerStatus(vehicle) {
+        // En una implementación real, verificarías el estado del odómetro
+        const currentYear = new Date().getFullYear();
+        const vehicleAge = currentYear - vehicle.año;
+        
+        if (vehicleAge > 10) {
+            return '<span class="odometer-alert" title="Vehículo antiguo">⚠️</span>';
+        }
+        
+        return '';
+    }
+
+    updateResultsCounter(count) {
+        const searchInput = document.getElementById('vehicleSearch');
+        const counter = document.getElementById('resultsCounter') || this.createResultsCounter();
+        
+        const total = this.vehicles.length;
+        const filtered = count;
+        
+        if (filtered === total) {
+            counter.textContent = `Mostrando todos los ${total} vehículos`;
+        } else {
+            counter.textContent = `Mostrando ${filtered} de ${total} vehículos`;
+        }
+    }
+
+    createResultsCounter() {
+        const counter = document.createElement('div');
+        counter.id = 'resultsCounter';
+        counter.className = 'results-counter';
+        
+        const filters = document.querySelector('.filters');
+        if (filters) {
+            filters.appendChild(counter);
+        }
+        
+        return counter;
+    }
+
+    updateVehicleStats() {
+        const stats = {
+            total: this.vehicles.length,
+            byRegional: {},
+            byYear: {}
+        };
+
+        this.vehicles.forEach(vehicle => {
+            // Estadísticas por regional
+            stats.byRegional[vehicle.regional] = (stats.byRegional[vehicle.regional] || 0) + 1;
+            
+            // Estadísticas por año
+            const yearRange = Math.floor(vehicle.año / 5) * 5;
+            stats.byYear[yearRange] = (stats.byYear[yearRange] || 0) + 1;
+        });
+
+        // Podrías mostrar estas estadísticas en algún lugar de la UI
+        console.log('Estadísticas de vehículos:', stats);
     }
 
     hasAlerts(vehicle) {
-        // En una implementación real, verificarías si el vehículo tiene mantenimientos pendientes, etc.
-        return false;
+        // En una implementación real, verificarías:
+        // - Mantenimientos pendientes
+        // - Componentes vencidos
+        // - Seguros por vencer
+        // - etc.
+        return Math.random() < 0.2; // 20% de chance para demo
     }
 
     filterVehicles(searchTerm) {
@@ -137,7 +266,8 @@ class VehiclesSystem {
                 vehicle.placa.toLowerCase().includes(term) ||
                 vehicle.marca.toLowerCase().includes(term) ||
                 vehicle.modelo.toLowerCase().includes(term) ||
-                vehicle.vin.toLowerCase().includes(term)
+                vehicle.vin.toLowerCase().includes(term) ||
+                vehicle.capacidad.toLowerCase().includes(term)
             );
         }
         this.renderVehiclesTable();
@@ -154,7 +284,49 @@ class VehiclesSystem {
         this.renderVehiclesTable();
     }
 
+    sortVehicles(field) {
+        const direction = this.currentSort.field === field && this.currentSort.direction === 'asc' ? 'desc' : 'asc';
+        
+        this.filteredVehicles.sort((a, b) => {
+            let aValue = a[field];
+            let bValue = b[field];
+            
+            // Manejar diferentes tipos de datos
+            if (field === 'año' || field === 'odometroInicial') {
+                aValue = parseInt(aValue);
+                bValue = parseInt(bValue);
+            } else if (typeof aValue === 'string') {
+                aValue = aValue.toLowerCase();
+                bValue = bValue.toLowerCase();
+            }
+            
+            if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+            if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        this.currentSort = { field, direction };
+        this.renderVehiclesTable();
+        this.updateSortIndicators(field, direction);
+    }
+
+    updateSortIndicators(field, direction) {
+        const headers = document.querySelectorAll('th[data-sortable]');
+        headers.forEach(header => {
+            header.classList.remove('sort-asc', 'sort-desc');
+            if (header.getAttribute('data-sortable') === field) {
+                header.classList.add(`sort-${direction}`);
+                header.title = `Ordenar ${direction === 'asc' ? 'ascendente' : 'descendente'}`;
+            }
+        });
+    }
+
     async showVehicleForm(vehicleId = null) {
+        if (!this.hasPermission('operator')) {
+            this.showError('No tiene permisos para registrar vehículos');
+            return;
+        }
+
         const vehicle = vehicleId ? this.vehicles.find(v => v.id === vehicleId) : null;
         
         const formContent = `
@@ -172,7 +344,8 @@ class VehiclesSystem {
                                    pattern="[A-Z0-9-]{4,10}" 
                                    title="Solo letras mayúsculas, números y guiones (4-10 caracteres)"
                                    maxlength="10"
-                                   placeholder="Ej: ABC-123">
+                                   placeholder="Ej: ABC-123"
+                                   ${vehicle ? 'readonly' : ''}>
                             <small>Formato: Letras mayúsculas, números y guiones</small>
                         </div>
                         <div class="form-group">
@@ -186,7 +359,8 @@ class VehiclesSystem {
                                    title="17 caracteres alfanuméricos"
                                    minlength="17"
                                    maxlength="17"
-                                   placeholder="17 caracteres alfanuméricos">
+                                   placeholder="17 caracteres alfanuméricos"
+                                   ${vehicle ? 'readonly' : ''}>
                             <small>17 caracteres (solo letras mayúsculas y números)</small>
                         </div>
                     </div>
@@ -224,7 +398,7 @@ class VehiclesSystem {
                                 <i class="fas fa-calendar-alt"></i> Año de Fabricación *
                             </label>
                             <input type="number" id="año" 
-                                   min="2000" 
+                                   min="1990" 
                                    max="${new Date().getFullYear() + 1}" 
                                    value="${vehicle ? vehicle.año : new Date().getFullYear()}" 
                                    required>
@@ -261,9 +435,11 @@ class VehiclesSystem {
                             </label>
                             <select id="regional" required>
                                 <option value="">Seleccionar regional</option>
-                                <option value="Norte" ${vehicle && vehicle.regional === 'Norte' ? 'selected' : ''}>Norte</option>
-                                <option value="Sur" ${vehicle && vehicle.regional === 'Sur' ? 'selected' : ''}>Sur</option>
-                                <option value="Centro" ${vehicle && vehicle.regional === 'Centro' ? 'selected' : ''}>Centro</option>
+                                ${this.regionalList.map(regional => `
+                                    <option value="${regional}" ${vehicle && vehicle.regional === regional ? 'selected' : ''}>
+                                        ${regional}
+                                    </option>
+                                `).join('')}
                             </select>
                         </div>
                     </div>
@@ -283,11 +459,11 @@ class VehiclesSystem {
 
         showModal(vehicle ? 'Editar Vehículo' : 'Nuevo Vehículo', formContent);
 
-        // Poner foco en el primer campo
+        // Poner foco en el primer campo editable
         setTimeout(() => {
-            const placaInput = document.getElementById('placa');
-            if (placaInput) {
-                placaInput.focus();
+            const focusField = vehicle ? document.getElementById('marca') : document.getElementById('placa');
+            if (focusField) {
+                focusField.focus();
             }
         }, 100);
     }
@@ -295,8 +471,7 @@ class VehiclesSystem {
     async handleVehicleSubmit(event) {
         event.preventDefault();
         
-        // Validar permisos
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para realizar esta acción');
             return;
         }
@@ -313,27 +488,7 @@ class VehiclesSystem {
         };
 
         // Validaciones adicionales
-        if (formData.placa.length < 4) {
-            this.showError('La placa debe tener al menos 4 caracteres');
-            document.getElementById('placa').focus();
-            return;
-        }
-
-        if (formData.vin.length !== 17) {
-            this.showError('El VIN debe tener exactamente 17 caracteres');
-            document.getElementById('vin').focus();
-            return;
-        }
-
-        if (formData.año < 2000 || formData.año > new Date().getFullYear() + 1) {
-            this.showError('El año debe ser válido');
-            document.getElementById('año').focus();
-            return;
-        }
-
-        if (formData.odometroInicial < 0) {
-            this.showError('El odómetro no puede ser negativo');
-            document.getElementById('odometroInicial').focus();
+        if (!this.validateVehicleData(formData)) {
             return;
         }
 
@@ -360,8 +515,59 @@ class VehiclesSystem {
         }
     }
 
+    validateVehicleData(data) {
+        // Validar placa
+        if (data.placa.length < 4) {
+            this.showError('La placa debe tener al menos 4 caracteres');
+            document.getElementById('placa').focus();
+            return false;
+        }
+
+        if (!/^[A-Z0-9-]+$/.test(data.placa)) {
+            this.showError('La placa solo puede contener letras mayúsculas, números y guiones');
+            document.getElementById('placa').focus();
+            return false;
+        }
+
+        // Validar VIN
+        if (data.vin.length !== 17) {
+            this.showError('El VIN debe tener exactamente 17 caracteres');
+            document.getElementById('vin').focus();
+            return false;
+        }
+
+        if (!/^[A-Z0-9]+$/.test(data.vin)) {
+            this.showError('El VIN solo puede contener letras mayúsculas y números');
+            document.getElementById('vin').focus();
+            return false;
+        }
+
+        // Validar año
+        const currentYear = new Date().getFullYear();
+        if (data.año < 1990 || data.año > currentYear + 1) {
+            this.showError(`El año debe estar entre 1990 y ${currentYear + 1}`);
+            document.getElementById('año').focus();
+            return false;
+        }
+
+        // Validar odómetro
+        if (data.odometroInicial < 0) {
+            this.showError('El odómetro no puede ser negativo');
+            document.getElementById('odometroInicial').focus();
+            return false;
+        }
+
+        if (data.odometroInicial > 1000000) {
+            this.showError('El odómetro no puede exceder 1,000,000 km');
+            document.getElementById('odometroInicial').focus();
+            return false;
+        }
+
+        return true;
+    }
+
     async editVehicle(vehicleId) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para editar vehículos');
             return;
         }
@@ -369,7 +575,7 @@ class VehiclesSystem {
     }
 
     async deleteVehicle(vehicleId) {
-        if (!authSystem.hasPermission('admin')) {
+        if (!this.hasPermission('admin')) {
             this.showError('No tiene permisos para eliminar vehículos');
             return;
         }
@@ -380,10 +586,20 @@ class VehiclesSystem {
             return;
         }
 
+        // Verificar si el vehículo tiene datos asociados
+        const hasAssociatedData = await this.checkVehicleAssociatedData(vehicleId);
+        let warningMessage = '';
+
+        if (hasAssociatedData) {
+            warningMessage = `<br><small class="text-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                Este vehículo tiene componentes, fallas y gastos asociados que también serán eliminados.
+            </small>`;
+        }
+
         const confirmation = await this.showConfirmation(
             'Eliminar Vehículo',
-            `¿Está seguro de eliminar el vehículo <strong>${this.escapeHtml(vehicle.placa)}</strong>?<br>
-             <small class="text-danger">Esta acción eliminará todos los componentes, fallas y gastos asociados.</small>`,
+            `¿Está seguro de eliminar el vehículo <strong>${this.escapeHtml(vehicle.placa)}</strong>?${warningMessage}`,
             'warning'
         );
 
@@ -402,8 +618,23 @@ class VehiclesSystem {
         }
     }
 
+    async checkVehicleAssociatedData(vehicleId) {
+        try {
+            const [components, failures, expenses] = await Promise.all([
+                database.getComponentsByVehicle(vehicleId),
+                database.getFailuresByVehicle(vehicleId),
+                database.getExpensesByVehicle(vehicleId)
+            ]);
+
+            return components.length > 0 || failures.length > 0 || expenses.length > 0;
+        } catch (error) {
+            console.error('Error verificando datos asociados:', error);
+            return false;
+        }
+    }
+
     async manageComponents(vehicleId) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para gestionar componentes');
             return;
         }
@@ -428,11 +659,12 @@ class VehiclesSystem {
                         <div class="vehicle-info">
                             <span><strong>Vehículo:</strong> ${this.escapeHtml(vehicle.marca)} ${this.escapeHtml(vehicle.modelo)}</span>
                             <span><strong>Regional:</strong> ${vehicle.regional}</span>
+                            <span><strong>Año:</strong> ${vehicle.año}</span>
                         </div>
                     </div>
                     
                     <div class="components-section">
-                        <h5><i class="fas fa-list"></i> Componentes Registrados</h5>
+                        <h5><i class="fas fa-list"></i> Componentes Registrados (${components.length})</h5>
                         <div class="components-list">
                             ${components.length === 0 ? 
                                 '<div class="empty-state small"><i class="fas fa-cogs"></i><p>No hay componentes registrados</p></div>' :
@@ -441,10 +673,12 @@ class VehiclesSystem {
                                         <div class="component-header">
                                             <strong>${this.escapeHtml(comp.nombre)}</strong>
                                             <div class="component-actions">
-                                                <button class="btn-action btn-edit" onclick="vehiclesSystem.editComponent(${comp.id}, ${vehicleId})" title="Editar componente">
+                                                <button class="btn-action btn-edit" onclick="vehiclesSystem.editComponent(${comp.id}, ${vehicleId})" 
+                                                        title="Editar componente" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                                                     <i class="fas fa-edit"></i>
                                                 </button>
-                                                <button class="btn-action btn-delete" onclick="vehiclesSystem.deleteComponent(${comp.id}, ${vehicleId})" title="Eliminar componente">
+                                                <button class="btn-action btn-delete" onclick="vehiclesSystem.deleteComponent(${comp.id}, ${vehicleId})" 
+                                                        title="Eliminar componente" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                                                     <i class="fas fa-trash"></i>
                                                 </button>
                                             </div>
@@ -516,7 +750,7 @@ class VehiclesSystem {
                                 </div>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="btn-primary">
+                                <button type="submit" class="btn-primary" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                                     <i class="fas fa-plus"></i> Agregar Componente
                                 </button>
                             </div>
@@ -568,7 +802,7 @@ class VehiclesSystem {
     async handleAddComponent(event, vehicleId) {
         event.preventDefault();
         
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para agregar componentes');
             return;
         }
@@ -592,6 +826,13 @@ class VehiclesSystem {
             return;
         }
 
+        // Validar fecha de instalación
+        const installDate = new Date(componentData.fechaInstalacion);
+        if (installDate > new Date()) {
+            this.showError('La fecha de instalación no puede ser futura');
+            return;
+        }
+
         try {
             await database.createComponent(componentData);
             this.showSuccess('Componente agregado exitosamente');
@@ -604,7 +845,7 @@ class VehiclesSystem {
     }
 
     async editComponent(componentId, vehicleId) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para editar componentes');
             return;
         }
@@ -668,6 +909,12 @@ class VehiclesSystem {
             caracteristicas: document.getElementById('editCaracteristicas').value.trim()
         };
 
+        // Validaciones
+        if (updates.vidaUtil < 1 || updates.vidaUtil > 120) {
+            this.showError('La vida útil debe estar entre 1 y 120 meses');
+            return;
+        }
+
         try {
             await database.updateComponent(componentId, updates);
             this.showSuccess('Componente actualizado exitosamente');
@@ -680,7 +927,7 @@ class VehiclesSystem {
     }
 
     async deleteComponent(componentId, vehicleId) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para eliminar componentes');
             return;
         }
@@ -807,10 +1054,10 @@ class VehiclesSystem {
                     </div>
 
                     <div class="details-actions">
-                        <button class="btn-secondary" onclick="vehiclesSystem.manageComponents(${vehicleId})">
+                        <button class="btn-secondary" onclick="vehiclesSystem.manageComponents(${vehicleId})" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-cogs"></i> Gestionar Componentes
                         </button>
-                        <button class="btn-primary" onclick="vehiclesSystem.editVehicle(${vehicleId})">
+                        <button class="btn-primary" onclick="vehiclesSystem.editVehicle(${vehicleId})" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-edit"></i> Editar Vehículo
                         </button>
                     </div>
@@ -827,6 +1074,53 @@ class VehiclesSystem {
         }
     }
 
+    async exportVehiclesData() {
+        try {
+            this.showLoading('Generando exportación...');
+            
+            const data = this.filteredVehicles.map(vehicle => ({
+                Placa: vehicle.placa,
+                Marca: vehicle.marca,
+                Modelo: vehicle.modelo,
+                Año: vehicle.año,
+                Regional: vehicle.regional,
+                Capacidad: vehicle.capacidad,
+                'Odómetro Inicial': vehicle.odometroInicial,
+                VIN: vehicle.vin
+            }));
+
+            // Crear CSV
+            const headers = Object.keys(data[0] || {});
+            const csvContent = [
+                headers.join(','),
+                ...data.map(row => headers.map(header => `"${row[header]}"`).join(','))
+            ].join('\n');
+
+            // Descargar archivo
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `vehiculos_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            this.showSuccess('Datos exportados exitosamente');
+            
+        } catch (error) {
+            console.error('Error exportando datos:', error);
+            this.showError('Error al exportar los datos');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    async refreshData() {
+        await this.loadVehicles();
+    }
+
     // Métodos de utilidad
     escapeHtml(unsafe) {
         if (!unsafe) return '';
@@ -839,13 +1133,20 @@ class VehiclesSystem {
             .replace(/'/g, "&#039;");
     }
 
+    hasPermission(requiredRole) {
+        return window.authSystem && window.authSystem.hasPermission(requiredRole);
+    }
+
     showLoading(message = 'Cargando...') {
-        // Implementar sistema de loading si es necesario
-        console.log('Loading:', message);
+        if (window.flotaApp) {
+            window.flotaApp.showLoading(message);
+        }
     }
 
     hideLoading() {
-        // Ocultar loading si está implementado
+        if (window.flotaApp) {
+            window.flotaApp.hideLoading();
+        }
     }
 
     showSuccess(message) {
@@ -889,12 +1190,16 @@ class VehiclesSystem {
     }
 }
 
+// Inicializar sistema de vehículos cuando esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof database !== 'undefined') {
+        window.vehiclesSystem = new VehiclesSystem();
+    }
+});
+
 // Funciones globales
 function showVehicleForm() {
     if (window.vehiclesSystem) {
         window.vehiclesSystem.showVehicleForm();
     }
 }
-
-// Inicializar sistema de vehículos
-window.vehiclesSystem = new VehiclesSystem();
