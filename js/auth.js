@@ -1,15 +1,25 @@
-// Sistema de Autenticación y Gestión de Usuarios - COMPLETO
+// Sistema de Autenticación y Gestión de Usuarios - OPTIMIZADO Y COMPLETADO
 class AuthSystem {
     constructor() {
         this.currentUser = null;
         this.forcePasswordChange = false;
+        this.sessionTimeout = 30 * 60 * 1000; // 30 minutos
+        this.sessionTimer = null;
         this.init();
     }
 
     async init() {
-        await this.initializeDefaultUsers();
-        this.checkLoginStatus();
-        this.setupEventListeners();
+        try {
+            await this.initializeDefaultUsers();
+            this.checkLoginStatus();
+            this.setupEventListeners();
+            this.setupSessionMonitoring();
+            
+            console.log('✅ Sistema de autenticación inicializado');
+        } catch (error) {
+            console.error('❌ Error inicializando sistema de autenticación:', error);
+            this.showError('Error crítico en el sistema de autenticación');
+        }
     }
 
     async initializeDefaultUsers() {
@@ -17,36 +27,41 @@ class AuthSystem {
             const users = await database.getUsers();
             
             if (users.length === 0) {
-                console.log('Creando usuarios por defecto...');
+                console.log('🔧 Creando usuarios por defecto...');
                 
-                // Crear usuarios por defecto con flag de cambio de contraseña
                 const defaultUsers = [
                     {
                         username: 'admin',
                         password: 'admin123',
                         name: 'Administrador Principal',
                         role: 'admin',
+                        email: 'admin@flota.com',
                         lastLogin: null,
                         active: true,
-                        forcePasswordChange: true // Forzar cambio en primer login
+                        forcePasswordChange: true,
+                        createdAt: new Date()
                     },
                     {
                         username: 'operador',
                         password: 'operador123',
                         name: 'Operador General',
                         role: 'operator',
+                        email: 'operador@flota.com',
                         lastLogin: null,
                         active: true,
-                        forcePasswordChange: true
+                        forcePasswordChange: true,
+                        createdAt: new Date()
                     },
                     {
                         username: 'invitado',
                         password: 'invitado123',
                         name: 'Usuario Invitado',
                         role: 'guest',
+                        email: 'invitado@flota.com',
                         lastLogin: null,
                         active: true,
-                        forcePasswordChange: true
+                        forcePasswordChange: true,
+                        createdAt: new Date()
                     }
                 ];
 
@@ -54,20 +69,19 @@ class AuthSystem {
                     await database.createUser(user);
                 }
                 
-                console.log('Usuarios por defecto creados exitosamente');
+                console.log('✅ Usuarios por defecto creados exitosamente');
             } else {
-                console.log('Usuarios ya existen en la base de datos');
+                console.log('✅ Usuarios ya existen en la base de datos');
             }
         } catch (error) {
-            console.error('Error inicializando usuarios por defecto:', error);
-            this.showError('Error crítico: No se pudieron crear los usuarios por defecto');
+            console.error('❌ Error inicializando usuarios por defecto:', error);
+            throw error;
         }
     }
 
     setupEventListeners() {
+        // Login form
         const loginForm = document.getElementById('loginForm');
-        const logoutBtn = document.getElementById('logoutBtn');
-
         if (loginForm) {
             loginForm.addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -75,6 +89,8 @@ class AuthSystem {
             });
         }
 
+        // Logout button
+        const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', () => {
                 this.handleLogout();
@@ -97,26 +113,97 @@ class AuthSystem {
                     this.handleLogin();
                 }
             });
+
+            // Auto-focus en username al cargar
+            setTimeout(() => {
+                if (usernameInput && !this.currentUser) {
+                    usernameInput.focus();
+                }
+            }, 100);
+        }
+
+        // Event listeners para user dropdown
+        this.setupUserDropdown();
+    }
+
+    setupSessionMonitoring() {
+        // Monitorear actividad del usuario
+        const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+        
+        activityEvents.forEach(event => {
+            document.addEventListener(event, () => {
+                this.resetSessionTimer();
+            });
+        });
+
+        // Monitorear visibilidad de la página
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.pauseSessionTimer();
+            } else {
+                this.resumeSessionTimer();
+            }
+        });
+    }
+
+    resetSessionTimer() {
+        if (this.sessionTimer) {
+            clearTimeout(this.sessionTimer);
+        }
+        
+        if (this.currentUser) {
+            this.sessionTimer = setTimeout(() => {
+                this.handleSessionTimeout();
+            }, this.sessionTimeout);
+        }
+    }
+
+    pauseSessionTimer() {
+        if (this.sessionTimer) {
+            clearTimeout(this.sessionTimer);
+        }
+    }
+
+    resumeSessionTimer() {
+        if (this.currentUser) {
+            this.resetSessionTimer();
+        }
+    }
+
+    handleSessionTimeout() {
+        if (this.currentUser) {
+            this.showWarning('Sesión expirada por inactividad');
+            this.handleLogout();
         }
     }
 
     async handleLogin() {
-        const username = document.getElementById('username').value.trim();
-        const password = document.getElementById('password').value;
+        const username = document.getElementById('username')?.value.trim();
+        const password = document.getElementById('password')?.value;
 
         // Validaciones básicas
         if (!username || !password) {
             this.showError('Por favor complete todos los campos');
+            this.highlightEmptyFields();
+            return;
+        }
+
+        if (username.length < 3) {
+            this.showError('El usuario debe tener al menos 3 caracteres');
+            document.getElementById('username').focus();
             return;
         }
 
         try {
+            this.showLoading('Verificando credenciales...');
+            
             const user = await this.authenticate(username, password);
 
             if (user) {
                 // Verificar si el usuario está activo
                 if (!user.active) {
                     this.showError('Este usuario está desactivado. Contacte al administrador.');
+                    this.hideLoading();
                     return;
                 }
 
@@ -131,19 +218,46 @@ class AuthSystem {
                 this.showError('Usuario o contraseña incorrectos');
                 // Limpiar campo de contraseña
                 document.getElementById('password').value = '';
+                document.getElementById('password').focus();
             }
         } catch (error) {
             console.error('Error en login:', error);
             this.showError('Error al iniciar sesión. Intente nuevamente.');
+        } finally {
+            this.hideLoading();
         }
     }
 
+    highlightEmptyFields() {
+        const username = document.getElementById('username');
+        const password = document.getElementById('password');
+        
+        [username, password].forEach(field => {
+            if (field && !field.value.trim()) {
+                field.style.borderColor = '#e74c3c';
+                setTimeout(() => {
+                    if (field) field.style.borderColor = '';
+                }, 2000);
+            }
+        });
+    }
+
     async authenticate(username, password) {
-        const users = await database.getUsers();
-        return users.find(user => 
-            user.username.toLowerCase() === username.toLowerCase() && 
-            user.password === password
-        );
+        try {
+            const users = await database.getUsers();
+            const user = users.find(user => 
+                user.username.toLowerCase() === username.toLowerCase() && 
+                user.password === password
+            );
+            
+            // Log de intento de login (en un sistema real)
+            console.log(`Intento de login: ${username} - ${user ? 'Éxito' : 'Fallido'}`);
+            
+            return user;
+        } catch (error) {
+            console.error('Error en autenticación:', error);
+            throw error;
+        }
     }
 
     async login(user) {
@@ -151,33 +265,63 @@ class AuthSystem {
             this.currentUser = user;
             
             // Actualizar último login
+            const loginTime = new Date().toISOString();
             await database.updateUser(user.id, {
-                lastLogin: new Date().toISOString()
+                lastLogin: loginTime,
+                forcePasswordChange: false // Resetear si estaba en true
             });
 
             // Actualizar usuario en localStorage
-            localStorage.setItem('currentUser', JSON.stringify(user));
+            const userData = {
+                ...user,
+                lastLogin: loginTime,
+                sessionStart: new Date().toISOString()
+            };
+            
+            localStorage.setItem('currentUser', JSON.stringify(userData));
+            localStorage.setItem('sessionStart', new Date().toISOString());
             
             this.showMainSystem();
             this.updateUI();
             this.setupUserDropdown();
+            this.resetSessionTimer();
+            
+            // Log de login exitoso
+            console.log(`✅ Usuario ${user.username} inició sesión correctamente`);
             
             this.showSuccess(`Bienvenido, ${user.name}`);
             
         } catch (error) {
             console.error('Error en proceso de login:', error);
             this.showError('Error al completar el login');
+            throw error;
         }
     }
 
     handleLogout() {
-        if (this.currentUser) {
-            console.log(`Usuario ${this.currentUser.username} cerró sesión`);
+        const userName = this.currentUser?.name || 'Usuario';
+        
+        // Mostrar confirmación si hay trabajo pendiente
+        if (this.hasUnsavedChanges()) {
+            if (!confirm('Tiene cambios sin guardar. ¿Está seguro de cerrar sesión?')) {
+                return;
+            }
+        }
+
+        console.log(`👋 Usuario ${userName} cerró sesión`);
+        
+        // Limpiar timers
+        if (this.sessionTimer) {
+            clearTimeout(this.sessionTimer);
         }
         
         this.currentUser = null;
         this.forcePasswordChange = false;
+        
+        // Limpiar almacenamiento
         localStorage.removeItem('currentUser');
+        localStorage.removeItem('sessionStart');
+        
         this.showLoginSystem();
         
         // Limpiar formularios
@@ -185,13 +329,37 @@ class AuthSystem {
         if (loginForm) {
             loginForm.reset();
         }
+
+        this.showSuccess('Sesión cerrada correctamente');
+    }
+
+    hasUnsavedChanges() {
+        // Verificar si hay formularios con cambios sin guardar
+        const forms = document.querySelectorAll('form');
+        return Array.from(forms).some(form => {
+            const inputs = form.querySelectorAll('input, select, textarea');
+            return Array.from(inputs).some(input => {
+                return input.value !== input.defaultValue;
+            });
+        });
     }
 
     checkLoginStatus() {
         try {
             const storedUser = localStorage.getItem('currentUser');
-            if (storedUser) {
+            const sessionStart = localStorage.getItem('sessionStart');
+            
+            if (storedUser && sessionStart) {
                 const user = JSON.parse(storedUser);
+                const sessionAge = new Date() - new Date(sessionStart);
+                
+                // Verificar si la sesión ha expirado
+                if (sessionAge > this.sessionTimeout) {
+                    console.log('Sesión expirada por tiempo');
+                    this.handleLogout();
+                    return;
+                }
+                
                 this.currentUser = user;
                 
                 // Verificar si el usuario aún existe en la base de datos
@@ -204,9 +372,11 @@ class AuthSystem {
                             this.showMainSystem();
                             this.updateUI();
                             this.setupUserDropdown();
+                            this.resetSessionTimer();
                         }
                     } else {
                         // Usuario no válido, forzar logout
+                        console.log('Usuario almacenado no válido, forzando logout');
                         this.handleLogout();
                     }
                 });
@@ -234,7 +404,6 @@ class AuthSystem {
         document.getElementById('loginSystem').classList.add('hidden');
         document.getElementById('mainSystem').classList.add('hidden');
         
-        // Crear o mostrar formulario de cambio de contraseña
         let passwordChangeDiv = document.getElementById('passwordChangeSystem');
         
         if (!passwordChangeDiv) {
@@ -263,14 +432,17 @@ class AuthSystem {
                             <i class="fas fa-key"></i> Contraseña Actual:
                         </label>
                         <input type="password" id="currentPassword" required 
-                               placeholder="Ingrese su contraseña actual">
+                               placeholder="Ingrese su contraseña actual"
+                               autocomplete="current-password">
                     </div>
                     <div class="form-group">
                         <label for="newPassword">
                             <i class="fas fa-lock"></i> Nueva Contraseña:
                         </label>
                         <input type="password" id="newPassword" required 
-                               minlength="6" placeholder="Mínimo 6 caracteres">
+                               minlength="6" 
+                               placeholder="Mínimo 6 caracteres"
+                               autocomplete="new-password">
                         <small>La contraseña debe tener al menos 6 caracteres</small>
                     </div>
                     <div class="form-group">
@@ -278,7 +450,8 @@ class AuthSystem {
                             <i class="fas fa-lock"></i> Confirmar Nueva Contraseña:
                         </label>
                         <input type="password" id="confirmPassword" required 
-                               placeholder="Repita la nueva contraseña">
+                               placeholder="Repita la nueva contraseña"
+                               autocomplete="new-password">
                     </div>
                     <div class="password-strength" id="passwordStrength">
                         <div class="strength-bar">
@@ -307,7 +480,19 @@ class AuthSystem {
             this.handlePasswordChange();
         });
 
-        // Configurar validación de fortaleza de contraseña en tiempo real
+        // Configurar validación en tiempo real
+        this.setupPasswordValidation();
+
+        // Poner foco en el primer campo
+        setTimeout(() => {
+            const currentPasswordInput = document.getElementById('currentPassword');
+            if (currentPasswordInput) {
+                currentPasswordInput.focus();
+            }
+        }, 100);
+    }
+
+    setupPasswordValidation() {
         const newPasswordInput = document.getElementById('newPassword');
         const confirmPasswordInput = document.getElementById('confirmPassword');
         
@@ -323,18 +508,10 @@ class AuthSystem {
                 this.validatePasswordMatch();
             });
         }
-
-        // Poner foco en el primer campo
-        setTimeout(() => {
-            const currentPasswordInput = document.getElementById('currentPassword');
-            if (currentPasswordInput) {
-                currentPasswordInput.focus();
-            }
-        }, 100);
     }
 
     checkPasswordStrength() {
-        const password = document.getElementById('newPassword').value;
+        const password = document.getElementById('newPassword')?.value || '';
         const strengthFill = document.getElementById('strengthFill');
         const strengthText = document.getElementById('strengthText');
         
@@ -342,18 +519,17 @@ class AuthSystem {
 
         let strength = 0;
         let text = '';
-        let color = '#e74c3c'; // Rojo por defecto
+        let color = '#e74c3c';
 
         // Verificar longitud
         if (password.length >= 6) strength += 25;
         if (password.length >= 8) strength += 25;
         
         // Verificar complejidad
-        if (/[A-Z]/.test(password)) strength += 25; // Mayúsculas
-        if (/[0-9]/.test(password)) strength += 25; // Números
-        if (/[^A-Za-z0-9]/.test(password)) strength += 25; // Símbolos
+        if (/[A-Z]/.test(password)) strength += 25;
+        if (/[0-9]/.test(password)) strength += 25;
+        if (/[^A-Za-z0-9]/.test(password)) strength += 25;
 
-        // Ajustar a máximo 100%
         strength = Math.min(strength, 100);
 
         // Determinar texto y color
@@ -381,8 +557,8 @@ class AuthSystem {
     }
 
     validatePasswordMatch() {
-        const newPassword = document.getElementById('newPassword').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
+        const newPassword = document.getElementById('newPassword')?.value || '';
+        const confirmPassword = document.getElementById('confirmPassword')?.value || '';
         const submitBtn = document.getElementById('submitPasswordBtn');
         
         if (!submitBtn) return;
@@ -390,16 +566,18 @@ class AuthSystem {
         if (confirmPassword && newPassword !== confirmPassword) {
             submitBtn.disabled = true;
             submitBtn.title = 'Las contraseñas no coinciden';
+            submitBtn.classList.add('btn-disabled');
         } else {
             submitBtn.disabled = false;
             submitBtn.title = '';
+            submitBtn.classList.remove('btn-disabled');
         }
     }
 
     async handlePasswordChange() {
-        const currentPassword = document.getElementById('currentPassword').value;
-        const newPassword = document.getElementById('newPassword').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
+        const currentPassword = document.getElementById('currentPassword')?.value;
+        const newPassword = document.getElementById('newPassword')?.value;
+        const confirmPassword = document.getElementById('confirmPassword')?.value;
 
         // Validaciones
         if (!currentPassword) {
@@ -434,8 +612,16 @@ class AuthSystem {
             return;
         }
 
+        // Validar fortaleza de contraseña
+        if (newPassword.length < 8) {
+            const proceed = confirm('La contraseña es débil. ¿Desea continuar de todas formas?');
+            if (!proceed) {
+                document.getElementById('newPassword').focus();
+                return;
+            }
+        }
+
         try {
-            // Mostrar loading
             const submitBtn = document.getElementById('submitPasswordBtn');
             const originalText = submitBtn.innerHTML;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cambiando...';
@@ -559,13 +745,21 @@ class AuthSystem {
         const role = this.currentUser.role;
         
         // Deshabilitar ciertas acciones basadas en el rol
-        const actions = document.querySelectorAll('.header-actions button');
+        const actions = document.querySelectorAll('.header-actions button, .btn-action');
         actions.forEach(button => {
             if (role === 'guest') {
                 button.disabled = true;
                 button.style.opacity = '0.5';
                 button.style.cursor = 'not-allowed';
                 button.title = 'No tiene permisos para esta acción';
+            } else if (role === 'operator') {
+                // Operadores no pueden eliminar
+                if (button.classList.contains('btn-delete')) {
+                    button.disabled = true;
+                    button.style.opacity = '0.5';
+                    button.style.cursor = 'not-allowed';
+                    button.title = 'Solo administradores pueden eliminar';
+                }
             } else {
                 button.disabled = false;
                 button.style.opacity = '1';
@@ -573,14 +767,6 @@ class AuthSystem {
                 button.title = '';
             }
         });
-
-        // Ocultar botones de eliminar para invitados
-        if (role === 'guest') {
-            const deleteButtons = document.querySelectorAll('.btn-delete');
-            deleteButtons.forEach(button => {
-                button.style.display = 'none';
-            });
-        }
     }
 
     setupUserDropdown() {
@@ -590,20 +776,23 @@ class AuthSystem {
         if (dropdownBtn && dropdownContent) {
             dropdownBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                dropdownContent.classList.toggle('show');
+                const isShowing = dropdownContent.classList.toggle('show');
+                dropdownBtn.setAttribute('aria-expanded', isShowing.toString());
             });
 
             // Cerrar dropdown al hacer clic fuera
             document.addEventListener('click', (e) => {
                 if (!dropdownBtn.contains(e.target) && !dropdownContent.contains(e.target)) {
                     dropdownContent.classList.remove('show');
+                    dropdownBtn.setAttribute('aria-expanded', 'false');
                 }
             });
 
             // Cerrar dropdown con ESC
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
+                if (e.key === 'Escape' && dropdownContent.classList.contains('show')) {
                     dropdownContent.classList.remove('show');
+                    dropdownBtn.setAttribute('aria-expanded', 'false');
                 }
             });
         }
@@ -622,14 +811,16 @@ class AuthSystem {
                             <i class="fas fa-key"></i> Contraseña Actual:
                         </label>
                         <input type="password" id="profileCurrentPassword" required 
-                               placeholder="Ingrese su contraseña actual">
+                               placeholder="Ingrese su contraseña actual"
+                               autocomplete="current-password">
                     </div>
                     <div class="form-group">
                         <label for="profileNewPassword">
                             <i class="fas fa-lock"></i> Nueva Contraseña:
                         </label>
                         <input type="password" id="profileNewPassword" required 
-                               minlength="6" placeholder="Mínimo 6 caracteres">
+                               minlength="6" placeholder="Mínimo 6 caracteres"
+                               autocomplete="new-password">
                         <small>La contraseña debe tener al menos 6 caracteres</small>
                     </div>
                     <div class="form-group">
@@ -637,7 +828,8 @@ class AuthSystem {
                             <i class="fas fa-lock"></i> Confirmar Nueva Contraseña:
                         </label>
                         <input type="password" id="profileConfirmPassword" required 
-                               placeholder="Repita la nueva contraseña">
+                               placeholder="Repita la nueva contraseña"
+                               autocomplete="new-password">
                     </div>
                     <div class="form-actions">
                         <button type="button" class="btn-secondary" onclick="closeModal()">
@@ -670,9 +862,9 @@ class AuthSystem {
     }
 
     async handleProfilePasswordChange() {
-        const currentPassword = document.getElementById('profileCurrentPassword').value;
-        const newPassword = document.getElementById('profileNewPassword').value;
-        const confirmPassword = document.getElementById('profileConfirmPassword').value;
+        const currentPassword = document.getElementById('profileCurrentPassword')?.value;
+        const newPassword = document.getElementById('profileNewPassword')?.value;
+        const confirmPassword = document.getElementById('profileConfirmPassword')?.value;
 
         // Validaciones
         if (!currentPassword) {
@@ -726,6 +918,117 @@ class AuthSystem {
         }
     }
 
+    // Métodos para gestión de usuarios (solo admin)
+    async createUser(userData) {
+        if (!this.hasPermission('admin')) {
+            throw new Error('No tiene permisos para crear usuarios');
+        }
+
+        // Validar datos del usuario
+        if (!userData.username || !userData.password || !userData.name || !userData.role) {
+            throw new Error('Todos los campos son requeridos');
+        }
+
+        if (userData.password.length < 6) {
+            throw new Error('La contraseña debe tener al menos 6 caracteres');
+        }
+
+        // Validar formato de email si se proporciona
+        if (userData.email && !this.isValidEmail(userData.email)) {
+            throw new Error('El formato del email no es válido');
+        }
+
+        const existingUser = await database.getUserByUsername(userData.username);
+        if (existingUser) {
+            throw new Error('El nombre de usuario ya existe');
+        }
+
+        const newUser = {
+            ...userData,
+            lastLogin: null,
+            active: true,
+            forcePasswordChange: true,
+            createdAt: new Date()
+        };
+
+        return await database.createUser(newUser);
+    }
+
+    isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+
+    async updateUser(userId, updates) {
+        if (!this.hasPermission('admin') && this.currentUser.id !== userId) {
+            throw new Error('No tiene permisos para actualizar este usuario');
+        }
+
+        // Si se actualiza el username, verificar que no exista
+        if (updates.username && updates.username !== this.currentUser.username) {
+            const existingUser = await database.getUserByUsername(updates.username);
+            if (existingUser && existingUser.id !== userId) {
+                throw new Error('El nombre de usuario ya existe');
+            }
+        }
+
+        // Validar email si se actualiza
+        if (updates.email && !this.isValidEmail(updates.email)) {
+            throw new Error('El formato del email no es válido');
+        }
+
+        return await database.updateUser(userId, updates);
+    }
+
+    async deactivateUser(userId) {
+        if (!this.hasPermission('admin')) {
+            throw new Error('No tiene permisos para desactivar usuarios');
+        }
+
+        if (this.currentUser.id === userId) {
+            throw new Error('No puede desactivar su propio usuario');
+        }
+
+        return await this.updateUser(userId, { active: false });
+    }
+
+    async activateUser(userId) {
+        if (!this.hasPermission('admin')) {
+            throw new Error('No tiene permisos para activar usuarios');
+        }
+
+        return await this.updateUser(userId, { active: true });
+    }
+
+    // Método para verificar permisos
+    hasPermission(requiredRole) {
+        if (!this.currentUser) return false;
+        
+        const roleHierarchy = {
+            'guest': 0,
+            'operator': 1,
+            'admin': 2
+        };
+
+        const currentRoleLevel = roleHierarchy[this.currentUser.role] || 0;
+        const requiredRoleLevel = roleHierarchy[requiredRole] || 0;
+
+        return currentRoleLevel >= requiredRoleLevel;
+    }
+
+    // Método para obtener información del usuario actual
+    getCurrentUserInfo() {
+        if (!this.currentUser) return null;
+        
+        return {
+            ...this.currentUser,
+            roleName: this.getRoleName(this.currentUser.role),
+            canManageUsers: this.hasPermission('admin'),
+            canEdit: this.hasPermission('operator'),
+            isAdmin: this.currentUser.role === 'admin'
+        };
+    }
+
     // Métodos de utilidad para notificaciones
     showError(message) {
         this.showNotification(message, 'error');
@@ -751,6 +1054,8 @@ class AuthSystem {
         // Crear notificación
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
+        notification.setAttribute('role', 'alert');
+        notification.setAttribute('aria-live', 'polite');
         
         const icons = {
             'success': 'check-circle',
@@ -761,11 +1066,11 @@ class AuthSystem {
 
         notification.innerHTML = `
             <div class="notification-content">
-                <i class="fas fa-${icons[type] || 'info-circle'}"></i>
+                <i class="fas fa-${icons[type] || 'info-circle'}" aria-hidden="true"></i>
                 <span>${message}</span>
             </div>
-            <button class="notification-close" onclick="this.parentElement.remove()">
-                <i class="fas fa-times"></i>
+            <button class="notification-close" onclick="this.parentElement.remove()" aria-label="Cerrar notificación">
+                <i class="fas fa-times" aria-hidden="true"></i>
             </button>
         `;
 
@@ -786,98 +1091,44 @@ class AuthSystem {
         }, 10);
     }
 
-    // Métodos para gestión de usuarios (solo admin)
-    async createUser(userData) {
-        if (this.currentUser.role !== 'admin') {
-            throw new Error('No tiene permisos para crear usuarios');
+    showLoading(message = 'Cargando...') {
+        let overlay = document.getElementById('authLoadingOverlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'authLoadingOverlay';
+            overlay.className = 'loading-overlay';
+            overlay.innerHTML = `
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>${message}</p>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        } else {
+            overlay.querySelector('p').textContent = message;
         }
-
-        // Validar datos del usuario
-        if (!userData.username || !userData.password || !userData.name || !userData.role) {
-            throw new Error('Todos los campos son requeridos');
-        }
-
-        if (userData.password.length < 6) {
-            throw new Error('La contraseña debe tener al menos 6 caracteres');
-        }
-
-        const existingUser = await database.getUserByUsername(userData.username);
-        if (existingUser) {
-            throw new Error('El nombre de usuario ya existe');
-        }
-
-        const newUser = {
-            ...userData,
-            lastLogin: null,
-            active: true,
-            forcePasswordChange: true, // Forzar cambio en primer login
-            createdAt: new Date()
-        };
-
-        return await database.createUser(newUser);
     }
 
-    async updateUser(userId, updates) {
-        if (this.currentUser.role !== 'admin' && this.currentUser.id !== userId) {
-            throw new Error('No tiene permisos para actualizar este usuario');
+    hideLoading() {
+        const overlay = document.getElementById('authLoadingOverlay');
+        if (overlay) {
+            overlay.remove();
         }
-
-        // Si se actualiza el username, verificar que no exista
-        if (updates.username && updates.username !== this.currentUser.username) {
-            const existingUser = await database.getUserByUsername(updates.username);
-            if (existingUser && existingUser.id !== userId) {
-                throw new Error('El nombre de usuario ya existe');
-            }
-        }
-
-        return await database.updateUser(userId, updates);
-    }
-
-    async deactivateUser(userId) {
-        if (this.currentUser.role !== 'admin') {
-            throw new Error('No tiene permisos para desactivar usuarios');
-        }
-
-        if (this.currentUser.id === userId) {
-            throw new Error('No puede desactivar su propio usuario');
-        }
-
-        return await this.updateUser(userId, { active: false });
-    }
-
-    async activateUser(userId) {
-        if (this.currentUser.role !== 'admin') {
-            throw new Error('No tiene permisos para activar usuarios');
-        }
-
-        return await this.updateUser(userId, { active: true });
-    }
-
-    // Método para verificar permisos
-    hasPermission(requiredRole) {
-        const roleHierarchy = {
-            'guest': 0,
-            'operator': 1,
-            'admin': 2
-        };
-
-        const currentRoleLevel = roleHierarchy[this.currentUser.role] || 0;
-        const requiredRoleLevel = roleHierarchy[requiredRole] || 0;
-
-        return currentRoleLevel >= requiredRoleLevel;
-    }
-
-    // Método para obtener información del usuario actual
-    getCurrentUserInfo() {
-        return {
-            ...this.currentUser,
-            roleName: this.getRoleName(this.currentUser.role),
-            canManageUsers: this.hasPermission('admin'),
-            canEdit: this.hasPermission('operator'),
-            isAdmin: this.currentUser.role === 'admin'
-        };
     }
 }
 
-// Inicializar sistema de autenticación
-const authSystem = new AuthSystem();
+// Inicializar sistema de autenticación cuando esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    // Verificar dependencias
+    if (typeof database === 'undefined') {
+        console.error('Database no está disponible');
+        return;
+    }
+
+    window.authSystem = new AuthSystem();
+});
+
+// Exportar para uso en otros módulos
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = AuthSystem;
+}
