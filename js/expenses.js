@@ -1,4 +1,4 @@
-// Sistema de Gestión de Gastos - COMPLETO
+// Sistema de Gestión de Gastos - OPTIMIZADO Y COMPLETADO
 class ExpensesSystem {
     constructor() {
         this.expenses = [];
@@ -13,13 +13,25 @@ class ExpensesSystem {
             'Repuestos',
             'Otros'
         ];
+        this.regionalList = ['Norte', 'Sur', 'Centro'];
+        this.currentFilters = {
+            type: '',
+            month: '',
+            search: ''
+        };
         this.init();
     }
 
     async init() {
-        await this.loadExpenses();
-        this.setupEventListeners();
-        this.updateExpenseStats();
+        try {
+            await this.loadExpenses();
+            this.setupEventListeners();
+            this.setupGlobalHandlers();
+            console.log('✅ Sistema de gastos inicializado');
+        } catch (error) {
+            console.error('❌ Error inicializando sistema de gastos:', error);
+            this.showError('Error al inicializar el sistema de gastos');
+        }
     }
 
     async loadExpenses() {
@@ -30,6 +42,8 @@ class ExpensesSystem {
             this.filteredExpenses = [...this.expenses];
             
             this.renderExpensesTable();
+            this.updateExpenseStats();
+            this.updateBudgetAlerts();
             this.hideLoading();
             
         } catch (error) {
@@ -45,26 +59,112 @@ class ExpensesSystem {
         const monthFilter = document.getElementById('expenseMonthFilter');
 
         if (typeFilter) {
-            typeFilter.addEventListener('change', () => this.filterExpenses());
+            typeFilter.addEventListener('change', (e) => {
+                this.currentFilters.type = e.target.value;
+                this.applyFilters();
+            });
         }
 
         if (monthFilter) {
-            monthFilter.addEventListener('change', () => this.filterExpenses());
+            monthFilter.addEventListener('change', (e) => {
+                this.currentFilters.month = e.target.value;
+                this.applyFilters();
+            });
         }
 
-        // Búsqueda si existe
+        // Búsqueda
         const searchInput = document.getElementById('expenseSearch');
         if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                this.filterExpensesBySearch(e.target.value);
-            });
+            searchInput.addEventListener('input', this.debounce((e) => {
+                this.currentFilters.search = e.target.value;
+                this.applyFilters();
+            }, 300));
             
             searchInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
-                    this.filterExpensesBySearch(e.target.value);
+                    this.applyFilters();
                 }
             });
         }
+
+        // Configurar fecha del filtro de mes al mes actual
+        this.setDefaultMonthFilter();
+    }
+
+    setupGlobalHandlers() {
+        // Auto-refresh cada minuto cuando el módulo está activo
+        setInterval(() => {
+            if (document.getElementById('expenses')?.classList.contains('active') && 
+                !document.hidden) {
+                this.refreshData();
+            }
+        }, 60000);
+
+        // Shortcuts de teclado
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'n' && document.getElementById('expenses')?.classList.contains('active')) {
+                e.preventDefault();
+                showExpenseForm();
+            }
+            
+            if (e.ctrlKey && e.key === 'e' && document.getElementById('expenses')?.classList.contains('active')) {
+                e.preventDefault();
+                this.exportExpensesData();
+            }
+        });
+    }
+
+    setDefaultMonthFilter() {
+        const monthFilter = document.getElementById('expenseMonthFilter');
+        if (monthFilter && !monthFilter.value) {
+            const now = new Date();
+            monthFilter.value = now.toISOString().slice(0, 7);
+            this.currentFilters.month = monthFilter.value;
+        }
+    }
+
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    applyFilters() {
+        let filtered = [...this.expenses];
+
+        // Filtro por tipo
+        if (this.currentFilters.type) {
+            filtered = filtered.filter(expense => expense.tipo === this.currentFilters.type);
+        }
+
+        // Filtro por mes
+        if (this.currentFilters.month) {
+            filtered = filtered.filter(expense => 
+                expense.fecha.startsWith(this.currentFilters.month)
+            );
+        }
+
+        // Filtro por búsqueda
+        if (this.currentFilters.search) {
+            const term = this.currentFilters.search.toLowerCase();
+            filtered = filtered.filter(expense =>
+                expense.placa.toLowerCase().includes(term) ||
+                expense.proveedor.toLowerCase().includes(term) ||
+                expense.tipo.toLowerCase().includes(term) ||
+                expense.regional.toLowerCase().includes(term) ||
+                (expense.notas && expense.notas.toLowerCase().includes(term))
+            );
+        }
+
+        this.filteredExpenses = filtered;
+        this.renderExpensesTable();
+        this.updateExpenseStats();
     }
 
     renderExpensesTable(expenses = this.filteredExpenses) {
@@ -77,7 +177,7 @@ class ExpensesSystem {
                     <td colspan="8" class="empty-state">
                         <i class="fas fa-receipt"></i>
                         <p>No hay gastos registrados</p>
-                        <button class="btn-primary" onclick="showExpenseForm()">
+                        <button class="btn-primary" onclick="showExpenseForm()" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-plus"></i> Registrar Primer Gasto
                         </button>
                     </td>
@@ -88,9 +188,10 @@ class ExpensesSystem {
 
         // Calcular totales
         const total = expenses.reduce((sum, expense) => sum + expense.monto, 0);
+        const average = expenses.length > 0 ? total / expenses.length : 0;
 
         tableBody.innerHTML = expenses.map(expense => `
-            <tr>
+            <tr data-expense-id="${expense.id}">
                 <td>
                     <div class="date-display">
                         <div class="date">${new Date(expense.fecha).toLocaleDateString()}</div>
@@ -104,7 +205,9 @@ class ExpensesSystem {
                     </span>
                 </td>
                 <td>
-                    <strong class="amount">${this.formatCurrency(expense.monto)}</strong>
+                    <strong class="amount ${this.getAmountColorClass(expense.monto)}">
+                        ${this.formatCurrency(expense.monto)}
+                    </strong>
                 </td>
                 <td>
                     <div class="vehicle-info">
@@ -118,7 +221,10 @@ class ExpensesSystem {
                     </span>
                 </td>
                 <td class="proveedor">
-                    ${this.escapeHtml(expense.proveedor)}
+                    <div class="proveedor-info">
+                        <span>${this.escapeHtml(expense.proveedor)}</span>
+                        ${expense.notas ? `<small class="proveedor-notas">${this.escapeHtml(expense.notas)}</small>` : ''}
+                    </div>
                 </td>
                 <td>
                     ${expense.comprobante ? 
@@ -135,7 +241,7 @@ class ExpensesSystem {
                         <button class="btn-action btn-edit" 
                                 onclick="expensesSystem.editExpense(${expense.id})" 
                                 title="Editar gasto"
-                                ${!authSystem.hasPermission('operator') ? 'disabled' : ''}>
+                                ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-edit"></i>
                         </button>
                         <button class="btn-action btn-info" 
@@ -143,7 +249,7 @@ class ExpensesSystem {
                                 title="Ver detalles">
                             <i class="fas fa-eye"></i>
                         </button>
-                        ${authSystem.hasPermission('admin') ? `
+                        ${this.hasPermission('admin') ? `
                         <button class="btn-action btn-delete" 
                                 onclick="expensesSystem.deleteExpense(${expense.id})" 
                                 title="Eliminar gasto">
@@ -154,12 +260,151 @@ class ExpensesSystem {
                 </td>
             </tr>
         `).join('') + `
-            <tr class="total-row">
-                <td colspan="2"><strong>Total mostrado:</strong></td>
+            <tr class="summary-row">
+                <td colspan="2"><strong>Resumen:</strong></td>
                 <td><strong class="total-amount">${this.formatCurrency(total)}</strong></td>
-                <td colspan="5"></td>
+                <td><small>${expenses.length} gastos</small></td>
+                <td><small>Promedio: ${this.formatCurrency(average)}</small></td>
+                <td colspan="3"></td>
             </tr>
         `;
+
+        // Actualizar contador de resultados
+        this.updateResultsCounter(expenses.length);
+    }
+
+    getAmountColorClass(amount) {
+        if (amount > 1000) return 'amount-high';
+        if (amount > 500) return 'amount-medium';
+        return 'amount-low';
+    }
+
+    updateResultsCounter(count) {
+        const counter = document.getElementById('expensesResultsCounter') || this.createResultsCounter();
+        
+        const total = this.expenses.length;
+        const filtered = count;
+        
+        if (filtered === total) {
+            counter.textContent = `Mostrando todos los ${total} gastos`;
+        } else {
+            counter.textContent = `Mostrando ${filtered} de ${total} gastos`;
+            
+            // Mostrar filtros activos
+            const activeFilters = [];
+            if (this.currentFilters.type) activeFilters.push(`tipo: ${this.currentFilters.type}`);
+            if (this.currentFilters.month) activeFilters.push(`mes: ${this.currentFilters.month}`);
+            if (this.currentFilters.search) activeFilters.push(`búsqueda: "${this.currentFilters.search}"`);
+            
+            if (activeFilters.length > 0) {
+                counter.innerHTML += `<br><small>Filtros: ${activeFilters.join(', ')}</small>`;
+            }
+        }
+    }
+
+    createResultsCounter() {
+        const counter = document.createElement('div');
+        counter.id = 'expensesResultsCounter';
+        counter.className = 'results-counter';
+        
+        const filters = document.querySelector('.filters');
+        if (filters) {
+            filters.appendChild(counter);
+        }
+        
+        return counter;
+    }
+
+    updateExpenseStats() {
+        const stats = {
+            total: this.filteredExpenses.reduce((sum, expense) => sum + expense.monto, 0),
+            count: this.filteredExpenses.length,
+            byType: {},
+            byRegional: {},
+            byMonth: {},
+            average: 0
+        };
+
+        this.filteredExpenses.forEach(expense => {
+            // Estadísticas por tipo
+            stats.byType[expense.tipo] = (stats.byType[expense.tipo] || 0) + expense.monto;
+            
+            // Estadísticas por regional
+            stats.byRegional[expense.regional] = (stats.byRegional[expense.regional] || 0) + expense.monto;
+            
+            // Estadísticas por mes
+            const month = expense.fecha.slice(0, 7);
+            stats.byMonth[month] = (stats.byMonth[month] || 0) + expense.monto;
+        });
+
+        stats.average = stats.count > 0 ? stats.total / stats.count : 0;
+
+        // Actualizar UI de estadísticas
+        this.updateStatsDisplay(stats);
+        
+        console.log('Estadísticas de gastos:', stats);
+    }
+
+    updateStatsDisplay(stats) {
+        const statsElement = document.getElementById('expenseStats');
+        if (!statsElement) return;
+
+        statsElement.innerHTML = `
+            <div class="expense-stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>${this.formatCurrency(stats.total)}</h3>
+                        <p>Total Gastos</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-receipt"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>${stats.count}</h3>
+                        <p>Cantidad</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <i class="fas fa-calculator"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3>${this.formatCurrency(stats.average)}</h3>
+                        <p>Promedio</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async updateBudgetAlerts() {
+        try {
+            const currentMonth = new Date().toISOString().slice(0, 7);
+            const monthlyExpenses = this.expenses
+                .filter(expense => expense.fecha.startsWith(currentMonth))
+                .reduce((sum, expense) => sum + expense.monto, 0);
+
+            // Obtener presupuesto del mes actual
+            const budgets = await database.getBudgets();
+            const currentBudget = budgets.find(budget => 
+                budget.mes === currentMonth
+            );
+
+            if (currentBudget) {
+                const budgetUsage = (monthlyExpenses / currentBudget.presupuesto) * 100;
+                
+                if (budgetUsage > 90) {
+                    this.showWarning(`Alerta: Se ha utilizado el ${budgetUsage.toFixed(1)}% del presupuesto mensual`);
+                }
+            }
+        } catch (error) {
+            console.error('Error verificando presupuesto:', error);
+        }
     }
 
     getExpenseTypeClass(tipo) {
@@ -199,71 +444,8 @@ class ExpensesSystem {
         }
     }
 
-    filterExpenses() {
-        const typeFilter = document.getElementById('expenseTypeFilter');
-        const monthFilter = document.getElementById('expenseMonthFilter');
-
-        let filteredExpenses = this.expenses;
-
-        if (typeFilter && typeFilter.value) {
-            filteredExpenses = filteredExpenses.filter(expense => expense.tipo === typeFilter.value);
-        }
-
-        if (monthFilter && monthFilter.value) {
-            filteredExpenses = filteredExpenses.filter(expense => 
-                expense.fecha.startsWith(monthFilter.value)
-            );
-        }
-
-        this.filteredExpenses = filteredExpenses;
-        this.renderExpensesTable();
-        this.updateExpenseStats();
-    }
-
-    filterExpensesBySearch(searchTerm) {
-        if (!searchTerm) {
-            this.filteredExpenses = [...this.expenses];
-        } else {
-            const term = searchTerm.toLowerCase();
-            this.filteredExpenses = this.expenses.filter(expense =>
-                expense.placa.toLowerCase().includes(term) ||
-                expense.proveedor.toLowerCase().includes(term) ||
-                expense.tipo.toLowerCase().includes(term) ||
-                expense.regional.toLowerCase().includes(term)
-            );
-        }
-        this.renderExpensesTable();
-        this.updateExpenseStats();
-    }
-
-    updateExpenseStats() {
-        const total = this.filteredExpenses.reduce((sum, expense) => sum + expense.monto, 0);
-        const count = this.filteredExpenses.length;
-        
-        // Actualizar estadísticas en la UI si existen
-        const statsElement = document.getElementById('expenseStats');
-        if (statsElement) {
-            statsElement.innerHTML = `
-                <div class="expense-stats">
-                    <div class="stat">
-                        <span class="stat-label">Total Gastos:</span>
-                        <span class="stat-value">${this.formatCurrency(total)}</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label">Cantidad:</span>
-                        <span class="stat-value">${count}</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label">Promedio:</span>
-                        <span class="stat-value">${count > 0 ? this.formatCurrency(total / count) : this.formatCurrency(0)}</span>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
     async showExpenseForm(expenseId = null) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para registrar gastos');
             return;
         }
@@ -359,9 +541,11 @@ class ExpensesSystem {
                                 <i class="fas fa-map-marker-alt"></i> Regional *
                             </label>
                             <select id="expenseRegional" required>
-                                <option value="Norte" ${expense && expense.regional === 'Norte' ? 'selected' : ''}>Norte</option>
-                                <option value="Sur" ${expense && expense.regional === 'Sur' ? 'selected' : ''}>Sur</option>
-                                <option value="Centro" ${expense && expense.regional === 'Centro' ? 'selected' : ''}>Centro</option>
+                                ${this.regionalList.map(regional => `
+                                    <option value="${regional}" ${expense && expense.regional === regional ? 'selected' : ''}>
+                                        ${regional}
+                                    </option>
+                                `).join('')}
                             </select>
                         </div>
                     </div>
@@ -384,6 +568,12 @@ class ExpensesSystem {
                                    class="file-input">
                         </div>
                         <div class="file-info" id="fileInfo"></div>
+                        ${expense && expense.comprobante ? `
+                        <div class="existing-file">
+                            <i class="fas fa-paperclip"></i>
+                            <span>Comprobante adjunto previamente</span>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -396,23 +586,30 @@ class ExpensesSystem {
                         <textarea id="expenseNotas" rows="3" 
                                   placeholder="Información adicional sobre el gasto, observaciones, etc...">${expense && expense.notas ? this.escapeHtml(expense.notas) : ''}</textarea>
                         <small class="char-counter">
-                            <span id="notesCharCount">0</span>/500 caracteres
+                            <span id="notesCharCount">${expense ? (expense.notas || '').length : 0}</span>/500 caracteres
                         </small>
                     </div>
                 </div>
 
                 <div class="expense-summary" id="expenseSummary">
-                    <div class="summary-item">
-                        <span>Monto:</span>
-                        <strong id="summaryAmount">$0.00</strong>
-                    </div>
-                    <div class="summary-item">
-                        <span>Vehículo:</span>
-                        <span id="summaryVehicle">-</span>
-                    </div>
-                    <div class="summary-item">
-                        <span>Regional:</span>
-                        <span id="summaryRegional">-</span>
+                    <h5><i class="fas fa-chart-bar"></i> Resumen</h5>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <span>Monto:</span>
+                            <strong id="summaryAmount">$0.00</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>Vehículo:</span>
+                            <span id="summaryVehicle">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Regional:</span>
+                            <span id="summaryRegional">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Tipo:</span>
+                            <span id="summaryType">-</span>
+                        </div>
                     </div>
                 </div>
 
@@ -447,20 +644,37 @@ class ExpensesSystem {
         const montoInput = document.getElementById('expenseMonto');
         const placaSelect = document.getElementById('expensePlaca');
         const regionalSelect = document.getElementById('expenseRegional');
+        const tipoSelect = document.getElementById('expenseTipo');
         
-        if (montoInput) {
-            montoInput.addEventListener('input', () => this.updateExpenseSummary());
-        }
-        
+        const updateSummary = () => {
+            const monto = parseFloat(montoInput?.value) || 0;
+            const selectedVehicle = placaSelect?.options[placaSelect.selectedIndex];
+            const regional = regionalSelect?.value;
+            const tipo = tipoSelect?.value;
+
+            document.getElementById('summaryAmount').textContent = this.formatCurrency(monto);
+            document.getElementById('summaryVehicle').textContent = selectedVehicle?.value || '-';
+            document.getElementById('summaryRegional').textContent = regional || '-';
+            document.getElementById('summaryType').textContent = tipo || '-';
+        };
+
+        [montoInput, placaSelect, regionalSelect, tipoSelect].forEach(input => {
+            if (input) {
+                input.addEventListener('input', updateSummary);
+                input.addEventListener('change', updateSummary);
+            }
+        });
+
+        // Auto-completar regional desde vehículo seleccionado
         if (placaSelect) {
             placaSelect.addEventListener('change', () => {
-                this.updateExpenseSummary();
-                this.updateRegionalFromVehicle();
+                const selectedOption = placaSelect.options[placaSelect.selectedIndex];
+                const vehicleRegional = selectedOption?.getAttribute('data-regional');
+                if (vehicleRegional && regionalSelect) {
+                    regionalSelect.value = vehicleRegional;
+                    updateSummary();
+                }
             });
-        }
-        
-        if (regionalSelect) {
-            regionalSelect.addEventListener('change', () => this.updateExpenseSummary());
         }
 
         // Configurar upload de archivos
@@ -471,7 +685,6 @@ class ExpensesSystem {
         const notesCharCount = document.getElementById('notesCharCount');
         
         if (notesTextarea && notesCharCount) {
-            notesCharCount.textContent = notesTextarea.value.length;
             notesTextarea.addEventListener('input', () => {
                 notesCharCount.textContent = notesTextarea.value.length;
                 if (notesTextarea.value.length > 500) {
@@ -483,46 +696,7 @@ class ExpensesSystem {
         }
 
         // Actualizar resumen inicial
-        this.updateExpenseSummary();
-    }
-
-    updateExpenseSummary() {
-        const monto = parseFloat(document.getElementById('expenseMonto')?.value) || 0;
-        const placaSelect = document.getElementById('expensePlaca');
-        const selectedVehicle = placaSelect?.options[placaSelect.selectedIndex];
-        const regional = document.getElementById('expenseRegional')?.value;
-
-        const summaryAmount = document.getElementById('summaryAmount');
-        const summaryVehicle = document.getElementById('summaryVehicle');
-        const summaryRegional = document.getElementById('summaryRegional');
-
-        if (summaryAmount) {
-            summaryAmount.textContent = this.formatCurrency(monto);
-        }
-
-        if (summaryVehicle && selectedVehicle) {
-            summaryVehicle.textContent = selectedVehicle.value || '-';
-        }
-
-        if (summaryRegional) {
-            summaryRegional.textContent = regional || '-';
-        }
-    }
-
-    updateRegionalFromVehicle() {
-        const placaSelect = document.getElementById('expensePlaca');
-        const regionalSelect = document.getElementById('expenseRegional');
-        
-        if (!placaSelect || !regionalSelect) return;
-
-        const selectedOption = placaSelect.options[placaSelect.selectedIndex];
-        if (selectedOption && selectedOption.value) {
-            const vehicleRegional = selectedOption.getAttribute('data-regional');
-            if (vehicleRegional) {
-                regionalSelect.value = vehicleRegional;
-                this.updateExpenseSummary();
-            }
-        }
+        updateSummary();
     }
 
     setupFileUpload() {
@@ -617,7 +791,7 @@ class ExpensesSystem {
     async handleExpenseSubmit(event) {
         event.preventDefault();
         
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para realizar esta acción');
             return;
         }
@@ -638,27 +812,7 @@ class ExpensesSystem {
         };
 
         // Validaciones
-        if (formData.monto <= 0) {
-            this.showError('El monto debe ser mayor a cero');
-            document.getElementById('expenseMonto').focus();
-            return;
-        }
-
-        if (formData.monto > 1000000) {
-            this.showError('El monto no puede exceder $1,000,000');
-            document.getElementById('expenseMonto').focus();
-            return;
-        }
-
-        if (formData.proveedor.length < 2) {
-            this.showError('El nombre del proveedor es muy corto');
-            document.getElementById('expenseProveedor').focus();
-            return;
-        }
-
-        if (formData.notas.length > 500) {
-            this.showError('Las notas no pueden exceder 500 caracteres');
-            document.getElementById('expenseNotas').focus();
+        if (!this.validateExpenseData(formData)) {
             return;
         }
 
@@ -674,6 +828,9 @@ class ExpensesSystem {
                 // Nuevo gasto
                 result = await database.createExpense(formData);
                 this.showSuccess('Gasto registrado exitosamente');
+                
+                // Verificar alertas de presupuesto
+                this.updateBudgetAlerts();
             }
 
             await this.loadExpenses();
@@ -685,8 +842,44 @@ class ExpensesSystem {
         }
     }
 
+    validateExpenseData(data) {
+        if (data.monto <= 0) {
+            this.showError('El monto debe ser mayor a cero');
+            document.getElementById('expenseMonto').focus();
+            return false;
+        }
+
+        if (data.monto > 1000000) {
+            this.showError('El monto no puede exceder $1,000,000');
+            document.getElementById('expenseMonto').focus();
+            return false;
+        }
+
+        if (data.proveedor.length < 2) {
+            this.showError('El nombre del proveedor es muy corto');
+            document.getElementById('expenseProveedor').focus();
+            return false;
+        }
+
+        if (data.notas.length > 500) {
+            this.showError('Las notas no pueden exceder 500 caracteres');
+            document.getElementById('expenseNotas').focus();
+            return false;
+        }
+
+        // Validar que la fecha no sea futura
+        const expenseDate = new Date(data.fecha);
+        if (expenseDate > new Date()) {
+            this.showError('La fecha del gasto no puede ser futura');
+            document.getElementById('expenseFecha').focus();
+            return false;
+        }
+
+        return true;
+    }
+
     async editExpense(expenseId) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para editar gastos');
             return;
         }
@@ -784,7 +977,7 @@ class ExpensesSystem {
                     </div>
 
                     <div class="details-actions">
-                        ${authSystem.hasPermission('operator') ? `
+                        ${this.hasPermission('operator') ? `
                         <button class="btn-primary" onclick="expensesSystem.editExpense(${expense.id})">
                             <i class="fas fa-edit"></i> Editar Gasto
                         </button>
@@ -830,6 +1023,10 @@ class ExpensesSystem {
                             <strong>Fecha:</strong>
                             <span>${new Date(expense.fecha).toLocaleDateString()}</span>
                         </div>
+                        <div class="detail">
+                            <strong>Tipo:</strong>
+                            <span>${this.escapeHtml(expense.tipo)}</span>
+                        </div>
                     </div>
                     <div class="receipt-preview">
                         <div class="preview-placeholder">
@@ -859,7 +1056,7 @@ class ExpensesSystem {
     }
 
     async deleteExpense(expenseId) {
-        if (!authSystem.hasPermission('admin')) {
+        if (!this.hasPermission('admin')) {
             this.showError('No tiene permisos para eliminar gastos');
             return;
         }
@@ -893,6 +1090,53 @@ class ExpensesSystem {
         }
     }
 
+    async exportExpensesData() {
+        try {
+            this.showLoading('Generando exportación...');
+            
+            const data = this.filteredExpenses.map(expense => ({
+                Fecha: new Date(expense.fecha).toLocaleDateString(),
+                Tipo: expense.tipo,
+                Monto: expense.monto,
+                Vehículo: expense.placa,
+                Regional: expense.regional,
+                Proveedor: expense.proveedor,
+                'Notas Adicionales': expense.notas || '',
+                'Fecha Registro': new Date(expense.createdAt).toLocaleString()
+            }));
+
+            // Crear CSV
+            const headers = Object.keys(data[0] || {});
+            const csvContent = [
+                headers.join(','),
+                ...data.map(row => headers.map(header => `"${row[header]}"`).join(','))
+            ].join('\n');
+
+            // Descargar archivo
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `gastos_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            this.showSuccess('Datos exportados exitosamente');
+            
+        } catch (error) {
+            console.error('Error exportando datos:', error);
+            this.showError('Error al exportar los datos');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    async refreshData() {
+        await this.loadExpenses();
+    }
+
     // Métodos de utilidad
     formatCurrency(amount) {
         return new Intl.NumberFormat('es-ES', {
@@ -913,12 +1157,20 @@ class ExpensesSystem {
             .replace(/'/g, "&#039;");
     }
 
+    hasPermission(requiredRole) {
+        return window.authSystem && window.authSystem.hasPermission(requiredRole);
+    }
+
     showLoading(message = 'Cargando...') {
-        console.log('Loading:', message);
+        if (window.flotaApp) {
+            window.flotaApp.showLoading(message);
+        }
     }
 
     hideLoading() {
-        // Ocultar loading si está implementado
+        if (window.flotaApp) {
+            window.flotaApp.hideLoading();
+        }
     }
 
     showSuccess(message) {
@@ -934,6 +1186,14 @@ class ExpensesSystem {
             window.authSystem.showError(message);
         } else {
             alert('❌ ' + message);
+        }
+    }
+
+    showWarning(message) {
+        if (window.authSystem) {
+            window.authSystem.showWarning(message);
+        } else {
+            alert('⚠️ ' + message);
         }
     }
 
@@ -962,12 +1222,16 @@ class ExpensesSystem {
     }
 }
 
+// Inicializar sistema de gastos cuando esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof database !== 'undefined') {
+        window.expensesSystem = new ExpensesSystem();
+    }
+});
+
 // Funciones globales
 function showExpenseForm() {
     if (window.expensesSystem) {
         window.expensesSystem.showExpenseForm();
     }
 }
-
-// Inicializar sistema de gastos
-window.expensesSystem = new ExpensesSystem();
