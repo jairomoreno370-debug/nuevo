@@ -1,4 +1,4 @@
-// Sistema de Gestión de Mantenimiento y Fallas - COMPLETO
+// Sistema de Gestión de Mantenimiento y Fallas - OPTIMIZADO Y COMPLETADO
 class MaintenanceSystem {
     constructor() {
         this.failures = [];
@@ -10,12 +10,25 @@ class MaintenanceSystem {
             'Manguera GLP Carretel', 'Carretel', 'Motor Carretel', 'Juntas Flexibles',
             'Válvula Cierre Rápido o Suministro'
         ];
+        this.priorityLevels = [
+            { value: 'Alta', label: '🔴 Alta - Requiere atención inmediata', color: 'danger' },
+            { value: 'Media', label: '🟡 Media - Atender en 24-48 horas', color: 'warning' },
+            { value: 'Baja', label: '🟢 Baja - Atender cuando sea posible', color: 'success' }
+        ];
+        this.currentTab = 'openFailures';
         this.init();
     }
 
     async init() {
-        await this.loadFailures();
-        this.setupEventListeners();
+        try {
+            await this.loadFailures();
+            this.setupEventListeners();
+            this.setupGlobalHandlers();
+            console.log('✅ Sistema de mantenimiento inicializado');
+        } catch (error) {
+            console.error('❌ Error inicializando sistema de mantenimiento:', error);
+            this.showError('Error al inicializar el sistema de mantenimiento');
+        }
     }
 
     async loadFailures() {
@@ -26,6 +39,7 @@ class MaintenanceSystem {
             this.filteredFailures = [...this.failures];
             
             this.renderFailuresTables();
+            this.updateMaintenanceStats();
             this.hideLoading();
             
         } catch (error) {
@@ -45,45 +59,111 @@ class MaintenanceSystem {
             });
         });
 
-        // Enter key en búsqueda si existe
+        // Búsqueda en tiempo real
         const searchInput = document.getElementById('maintenanceSearch');
         if (searchInput) {
-            searchInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    this.filterFailures(e.target.value);
-                }
-            });
+            searchInput.addEventListener('input', this.debounce((e) => {
+                this.filterFailures(e.target.value);
+            }, 300));
         }
+
+        // Filtros adicionales
+        this.setupAdditionalFilters();
+    }
+
+    setupGlobalHandlers() {
+        // Auto-refresh cada 30 segundos cuando el módulo está activo
+        setInterval(() => {
+            if (document.getElementById('maintenance')?.classList.contains('active') && 
+                !document.hidden) {
+                this.refreshData();
+            }
+        }, 30000);
+
+        // Shortcuts de teclado
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'n' && document.getElementById('maintenance')?.classList.contains('active')) {
+                e.preventDefault();
+                showFailureForm();
+            }
+        });
+    }
+
+    setupAdditionalFilters() {
+        // Podrías agregar más filtros aquí como:
+        // - Filtro por prioridad
+        // - Filtro por componente
+        // - Filtro por fecha
+        console.log('Configurando filtros adicionales...');
+    }
+
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     }
 
     switchTab(tabName, button) {
         const tabButtons = button.parentElement.querySelectorAll('.tab-button');
-        tabButtons.forEach(btn => btn.classList.remove('active'));
+        tabButtons.forEach(btn => {
+            btn.classList.remove('active');
+            btn.setAttribute('aria-selected', 'false');
+        });
         button.classList.add('active');
+        button.setAttribute('aria-selected', 'true');
 
         const tabPanes = document.querySelectorAll('.tab-pane');
-        tabPanes.forEach(pane => pane.classList.remove('active'));
-        
-        const targetPane = document.getElementById(tabName);
-        if (targetPane) {
-            targetPane.classList.add('active');
-        }
+        tabPanes.forEach(pane => {
+            const isActive = pane.id === tabName;
+            pane.classList.toggle('active', isActive);
+            pane.hidden = !isActive;
+        });
 
-        // Actualizar la vista según el tab seleccionado
+        this.currentTab = tabName;
         this.updateTabView(tabName);
     }
 
     updateTabView(tabName) {
+        let failuresToShow = [];
+        
         switch (tabName) {
             case 'openFailures':
-                this.renderFailuresTable('openFailuresTableBody', this.filteredFailures.filter(f => f.estado === 'Abierta'));
+                failuresToShow = this.filteredFailures.filter(f => f.estado === 'Abierta');
                 break;
             case 'inProgressFailures':
-                this.renderFailuresTable('inProgressFailuresTableBody', this.filteredFailures.filter(f => f.estado === 'En Proceso'));
+                failuresToShow = this.filteredFailures.filter(f => f.estado === 'En Proceso');
                 break;
             case 'resolvedFailures':
-                this.renderFailuresTable('resolvedFailuresTableBody', this.filteredFailures.filter(f => f.estado === 'Resuelta'));
+                failuresToShow = this.filteredFailures.filter(f => f.estado === 'Resuelta');
                 break;
+        }
+
+        this.renderFailuresTable(`${tabName}TableBody`, failuresToShow);
+        this.updateTabStats(tabName, failuresToShow.length);
+    }
+
+    updateTabStats(tabName, count) {
+        const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
+        if (tabButton) {
+            // Remover contador anterior si existe
+            const existingBadge = tabButton.querySelector('.tab-badge');
+            if (existingBadge) {
+                existingBadge.remove();
+            }
+            
+            // Agregar nuevo contador
+            if (count > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'tab-badge';
+                badge.textContent = count;
+                tabButton.appendChild(badge);
+            }
         }
     }
 
@@ -91,6 +171,11 @@ class MaintenanceSystem {
         this.renderFailuresTable('openFailuresTableBody', this.filteredFailures.filter(f => f.estado === 'Abierta'));
         this.renderFailuresTable('inProgressFailuresTableBody', this.filteredFailures.filter(f => f.estado === 'En Proceso'));
         this.renderFailuresTable('resolvedFailuresTableBody', this.filteredFailures.filter(f => f.estado === 'Resuelta'));
+        
+        // Actualizar contadores de tabs
+        this.updateTabStats('openFailures', this.filteredFailures.filter(f => f.estado === 'Abierta').length);
+        this.updateTabStats('inProgressFailures', this.filteredFailures.filter(f => f.estado === 'En Proceso').length);
+        this.updateTabStats('resolvedFailures', this.filteredFailures.filter(f => f.estado === 'Resuelta').length);
     }
 
     renderFailuresTable(tableBodyId, failures) {
@@ -104,7 +189,7 @@ class MaintenanceSystem {
                         <i class="fas fa-check-circle"></i>
                         <p>No hay fallas en este estado</p>
                         ${tableBodyId === 'openFailuresTableBody' ? `
-                        <button class="btn-primary" onclick="showFailureForm()">
+                        <button class="btn-primary" onclick="showFailureForm()" ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-plus"></i> Registrar Primera Falla
                         </button>
                         ` : ''}
@@ -115,10 +200,13 @@ class MaintenanceSystem {
         }
 
         tableBody.innerHTML = failures.map(failure => `
-            <tr>
+            <tr data-failure-id="${failure.id}">
                 <td>
-                    <strong>${this.escapeHtml(failure.placa)}</strong>
-                    ${this.hasUrgentPriority(failure) ? '<i class="fas fa-exclamation-circle text-danger" title="Prioridad Alta"></i>' : ''}
+                    <div class="failure-placa">
+                        <strong>${this.escapeHtml(failure.placa)}</strong>
+                        ${this.hasUrgentPriority(failure) ? '<i class="fas fa-exclamation-circle text-danger" title="Prioridad Alta"></i>' : ''}
+                        ${this.isOverdue(failure) ? '<i class="fas fa-clock text-warning" title="Atrasada"></i>' : ''}
+                    </div>
                 </td>
                 <td>${this.escapeHtml(failure.componente)}</td>
                 <td>
@@ -147,7 +235,7 @@ class MaintenanceSystem {
                         <button class="btn-action btn-success" 
                                 onclick="maintenanceSystem.startMaintenance(${failure.id})" 
                                 title="Iniciar Mantenimiento"
-                                ${!authSystem.hasPermission('operator') ? 'disabled' : ''}>
+                                ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-play"></i>
                         </button>
                         ` : ''}
@@ -156,7 +244,7 @@ class MaintenanceSystem {
                         <button class="btn-action btn-primary" 
                                 onclick="maintenanceSystem.showMaintenanceForm(${failure.id})" 
                                 title="Completar Mantenimiento"
-                                ${!authSystem.hasPermission('operator') ? 'disabled' : ''}>
+                                ${!this.hasPermission('operator') ? 'disabled' : ''}>
                             <i class="fas fa-check"></i>
                         </button>
                         ` : ''}
@@ -167,7 +255,7 @@ class MaintenanceSystem {
                             <i class="fas fa-eye"></i>
                         </button>
                         
-                        ${failure.estado !== 'Resuelta' && authSystem.hasPermission('operator') ? `
+                        ${failure.estado !== 'Resuelta' && this.hasPermission('operator') ? `
                         <button class="btn-action btn-edit" 
                                 onclick="maintenanceSystem.editFailure(${failure.id})" 
                                 title="Editar Falla">
@@ -175,7 +263,7 @@ class MaintenanceSystem {
                         </button>
                         ` : ''}
                         
-                        ${authSystem.hasPermission('admin') ? `
+                        ${this.hasPermission('admin') ? `
                         <button class="btn-action btn-delete" 
                                 onclick="maintenanceSystem.deleteFailure(${failure.id})" 
                                 title="Eliminar Falla">
@@ -186,10 +274,74 @@ class MaintenanceSystem {
                 </td>
             </tr>
         `).join('');
+
+        // Actualizar contador de resultados
+        this.updateResultsCounter(failures.length, tableBodyId);
+    }
+
+    updateResultsCounter(count, tableBodyId) {
+        const counterId = `${tableBodyId.replace('TableBody', '')}Counter`;
+        let counter = document.getElementById(counterId);
+        
+        if (!counter) {
+            counter = document.createElement('div');
+            counter.id = counterId;
+            counter.className = 'results-counter';
+            
+            const tableContainer = document.getElementById(tableBodyId)?.closest('.table-container');
+            if (tableContainer) {
+                tableContainer.insertBefore(counter, tableContainer.firstChild);
+            }
+        }
+        
+        counter.textContent = `${count} fallas encontradas`;
+    }
+
+    updateMaintenanceStats() {
+        const stats = {
+            total: this.failures.length,
+            open: this.failures.filter(f => f.estado === 'Abierta').length,
+            inProgress: this.failures.filter(f => f.estado === 'En Proceso').length,
+            resolved: this.failures.filter(f => f.estado === 'Resuelta').length,
+            byPriority: {
+                Alta: this.failures.filter(f => f.prioridad === 'Alta').length,
+                Media: this.failures.filter(f => f.prioridad === 'Media').length,
+                Baja: this.failures.filter(f => f.prioridad === 'Baja').length
+            },
+            byComponent: {}
+        };
+
+        // Estadísticas por componente
+        this.failures.forEach(failure => {
+            stats.byComponent[failure.componente] = (stats.byComponent[failure.componente] || 0) + 1;
+        });
+
+        console.log('Estadísticas de mantenimiento:', stats);
+        
+        // Podrías mostrar estas estadísticas en el dashboard
+        this.updateDashboardStats(stats);
+    }
+
+    updateDashboardStats(stats) {
+        // Actualizar estadísticas en el dashboard si está disponible
+        if (window.flotaApp) {
+            // Esto podría actualizar widgets específicos del dashboard
+        }
     }
 
     hasUrgentPriority(failure) {
         return failure.prioridad === 'Alta';
+    }
+
+    isOverdue(failure) {
+        if (failure.estado !== 'Abierta') return false;
+        
+        const reportDate = new Date(failure.fechaHora);
+        const today = new Date();
+        const daysDiff = Math.floor((today - reportDate) / (1000 * 60 * 60 * 24));
+        
+        // Considerar atrasada si tiene más de 3 días
+        return daysDiff > 3;
     }
 
     getPriorityIcon(prioridad) {
@@ -202,7 +354,7 @@ class MaintenanceSystem {
     }
 
     async showFailureForm(failureId = null) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para registrar fallas');
             return;
         }
@@ -229,6 +381,7 @@ class MaintenanceSystem {
                                 ${vehicles.map(vehicle => `
                                     <option value="${vehicle.placa}" 
                                             data-id="${vehicle.id}"
+                                            data-regional="${vehicle.regional}"
                                             ${failure && failure.placa === vehicle.placa ? 'selected' : ''}>
                                         ${vehicle.placa} - ${this.escapeHtml(vehicle.marca)} ${this.escapeHtml(vehicle.modelo)}
                                     </option>
@@ -247,6 +400,7 @@ class MaintenanceSystem {
                                         ${comp}
                                     </option>
                                 `).join('')}
+                                <option value="Otro">Otro (especificar en descripción)</option>
                             </select>
                         </div>
                     </div>
@@ -259,22 +413,21 @@ class MaintenanceSystem {
                             <label for="failureFecha">
                                 <i class="fas fa-clock"></i> Fecha y Hora *
                             </label>
-                            <input type="datetime-local" id="failureFecha" required>
+                            <input type="datetime-local" id="failureFecha" 
+                                   value="${failure ? failure.fechaHora.slice(0, 16) : ''}" 
+                                   required>
                         </div>
                         <div class="form-group">
                             <label for="failurePrioridad">
                                 <i class="fas fa-flag"></i> Prioridad *
                             </label>
                             <select id="failurePrioridad" required>
-                                <option value="Alta" ${failure && failure.prioridad === 'Alta' ? 'selected' : ''}>
-                                    🔴 Alta - Requiere atención inmediata
-                                </option>
-                                <option value="Media" ${(!failure || failure.prioridad === 'Media') ? 'selected' : ''}>
-                                    🟡 Media - Atender en 24-48 horas
-                                </option>
-                                <option value="Baja" ${failure && failure.prioridad === 'Baja' ? 'selected' : ''}>
-                                    🟢 Baja - Atender cuando sea posible
-                                </option>
+                                ${this.priorityLevels.map(level => `
+                                    <option value="${level.value}" 
+                                            ${failure && failure.prioridad === level.value ? 'selected' : ''}>
+                                        ${level.label}
+                                    </option>
+                                `).join('')}
                             </select>
                         </div>
                     </div>
@@ -298,10 +451,28 @@ class MaintenanceSystem {
                         <textarea id="failureDescripcion" rows="4" required
                                   placeholder="Describa en detalle la falla encontrada, síntomas, condiciones de operación, etc...">${failure ? this.escapeHtml(failure.descripcion) : ''}</textarea>
                         <small class="char-counter">
-                            <span id="descCharCount">0</span>/500 caracteres
+                            <span id="descCharCount">${failure ? failure.descripcion.length : 0}</span>/500 caracteres
                         </small>
                     </div>
                 </div>
+
+                ${failure ? `
+                <div class="form-section">
+                    <h4><i class="fas fa-info-circle"></i> Información Adicional</h4>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <strong>Estado actual:</strong>
+                            <span class="status-badge ${failure.estado.toLowerCase().replace(' ', '-')}">
+                                ${failure.estado}
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Reportado hace:</strong>
+                            <span>${this.formatTimeAgo(new Date(failure.createdAt))}</span>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
 
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="closeModal()">
@@ -317,23 +488,36 @@ class MaintenanceSystem {
 
         showModal(failure ? 'Editar Falla' : 'Registrar Nueva Falla', formContent);
         
-        // Establecer fecha y hora actual por defecto
-        const now = new Date();
-        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        document.getElementById('failureFecha').value = now.toISOString().slice(0, 16);
+        // Establecer fecha y hora actual por defecto si es nueva falla
+        if (!failure) {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('failureFecha').value = now.toISOString().slice(0, 16);
+        }
 
         // Configurar contador de caracteres
         const descTextarea = document.getElementById('failureDescripcion');
         const charCount = document.getElementById('descCharCount');
         
         if (descTextarea && charCount) {
-            charCount.textContent = descTextarea.value.length;
             descTextarea.addEventListener('input', () => {
                 charCount.textContent = descTextarea.value.length;
                 if (descTextarea.value.length > 500) {
                     charCount.classList.add('text-danger');
                 } else {
                     charCount.classList.remove('text-danger');
+                }
+            });
+        }
+
+        // Auto-completar ubicación basada en el vehículo seleccionado
+        const placaSelect = document.getElementById('failurePlaca');
+        if (placaSelect) {
+            placaSelect.addEventListener('change', () => {
+                const selectedOption = placaSelect.options[placaSelect.selectedIndex];
+                const regional = selectedOption?.getAttribute('data-regional');
+                if (regional && !document.getElementById('failureUbicacion').value) {
+                    document.getElementById('failureUbicacion').value = `Taller ${regional}`;
                 }
             });
         }
@@ -350,7 +534,7 @@ class MaintenanceSystem {
     async handleFailureSubmit(event) {
         event.preventDefault();
         
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para realizar esta acción');
             return;
         }
@@ -370,15 +554,7 @@ class MaintenanceSystem {
         };
 
         // Validaciones
-        if (formData.descripcion.length > 500) {
-            this.showError('La descripción no puede exceder los 500 caracteres');
-            document.getElementById('failureDescripcion').focus();
-            return;
-        }
-
-        if (formData.descripcion.length < 10) {
-            this.showError('La descripción debe tener al menos 10 caracteres');
-            document.getElementById('failureDescripcion').focus();
+        if (!this.validateFailureData(formData)) {
             return;
         }
 
@@ -394,6 +570,11 @@ class MaintenanceSystem {
                 // Nueva falla
                 result = await database.createFailure(formData);
                 this.showSuccess('Falla registrada exitosamente');
+                
+                // Notificar si es prioridad alta
+                if (formData.prioridad === 'Alta') {
+                    this.notifyHighPriorityFailure(formData);
+                }
             }
 
             await this.loadFailures();
@@ -405,8 +586,43 @@ class MaintenanceSystem {
         }
     }
 
+    validateFailureData(data) {
+        if (data.descripcion.length > 500) {
+            this.showError('La descripción no puede exceder los 500 caracteres');
+            document.getElementById('failureDescripcion').focus();
+            return false;
+        }
+
+        if (data.descripcion.length < 10) {
+            this.showError('La descripción debe tener al menos 10 caracteres');
+            document.getElementById('failureDescripcion').focus();
+            return false;
+        }
+
+        // Validar que la fecha no sea futura
+        const failureDate = new Date(data.fechaHora);
+        if (failureDate > new Date()) {
+            this.showError('La fecha de la falla no puede ser futura');
+            document.getElementById('failureFecha').focus();
+            return false;
+        }
+
+        return true;
+    }
+
+    notifyHighPriorityFailure(failureData) {
+        // En un sistema real, esto podría:
+        // - Enviar notificación por email
+        // - Enviar mensaje a un canal de Slack/Teams
+        // - Activar una alarma
+        console.log('🚨 ALERTA: Falla de alta prioridad registrada', failureData);
+        
+        // Mostrar notificación local
+        this.showWarning(`Falla de ALTA PRIORIDAD registrada en ${failureData.placa}`);
+    }
+
     async startMaintenance(failureId) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para iniciar mantenimiento');
             return;
         }
@@ -420,7 +636,8 @@ class MaintenanceSystem {
         const confirmation = await this.showConfirmation(
             'Iniciar Mantenimiento',
             `¿Está seguro de iniciar el mantenimiento para la falla en <strong>${this.escapeHtml(failure.placa)}</strong>?<br>
-             <small>Componente: ${this.escapeHtml(failure.componente)}</small>`,
+             <small>Componente: ${this.escapeHtml(failure.componente)}</small><br>
+             <small class="text-info">Esta acción cambiará el estado a "En Proceso"</small>`,
             'info'
         );
 
@@ -428,7 +645,10 @@ class MaintenanceSystem {
 
         try {
             this.showLoading('Iniciando mantenimiento...');
-            await database.updateFailure(failureId, { estado: 'En Proceso' });
+            await database.updateFailure(failureId, { 
+                estado: 'En Proceso',
+                fechaInicioMantenimiento: new Date().toISOString()
+            });
             await this.loadFailures();
             this.showSuccess('Mantenimiento iniciado exitosamente');
         } catch (error) {
@@ -440,7 +660,7 @@ class MaintenanceSystem {
     }
 
     async showMaintenanceForm(failureId) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para completar mantenimiento');
             return;
         }
@@ -463,6 +683,7 @@ class MaintenanceSystem {
                     <div class="failure-info">
                         <div><strong>Componente:</strong> ${this.escapeHtml(failure.componente)}</div>
                         <div><strong>Descripción:</strong> ${this.escapeHtml(failure.descripcion)}</div>
+                        <div><strong>Prioridad:</strong> <span class="status-badge priority-${failure.prioridad.toLowerCase()}">${failure.prioridad}</span></div>
                     </div>
                 </div>
 
@@ -537,8 +758,22 @@ class MaintenanceSystem {
                         <textarea id="maintenanceNotas" rows="4" 
                                   placeholder="Descripción del trabajo realizado, piezas reemplazadas, observaciones, recomendaciones...">${existingMaintenance ? this.escapeHtml(existingMaintenance.notas || '') : ''}</textarea>
                         <small class="char-counter">
-                            <span id="notesCharCount">0</span>/1000 caracteres
+                            <span id="notesCharCount">${existingMaintenance ? (existingMaintenance.notas || '').length : 0}</span>/1000 caracteres
                         </small>
+                    </div>
+                </div>
+
+                <div class="maintenance-summary">
+                    <h5><i class="fas fa-calculator"></i> Resumen</h5>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <span>Duración:</span>
+                            <strong id="durationSummary">-</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>Costo por día:</span>
+                            <strong id="costPerDaySummary">-</strong>
+                        </div>
                     </div>
                 </div>
 
@@ -554,6 +789,9 @@ class MaintenanceSystem {
         `;
 
         showModal('Completar Mantenimiento', formContent);
+
+        // Configurar cálculos en tiempo real
+        this.setupMaintenanceCalculations();
 
         // Establecer fechas por defecto
         const now = new Date();
@@ -574,7 +812,6 @@ class MaintenanceSystem {
         const notesCharCount = document.getElementById('notesCharCount');
         
         if (notesTextarea && notesCharCount) {
-            notesCharCount.textContent = notesTextarea.value.length;
             notesTextarea.addEventListener('input', () => {
                 notesCharCount.textContent = notesTextarea.value.length;
                 if (notesTextarea.value.length > 1000) {
@@ -592,6 +829,42 @@ class MaintenanceSystem {
                 tallerInput.focus();
             }
         }, 100);
+    }
+
+    setupMaintenanceCalculations() {
+        const fechaInicio = document.getElementById('maintenanceFechaInicio');
+        const fechaFin = document.getElementById('maintenanceFechaFin');
+        const costo = document.getElementById('maintenanceCosto');
+
+        const updateSummary = () => {
+            try {
+                const start = new Date(fechaInicio.value);
+                const end = new Date(fechaFin.value);
+                const cost = parseFloat(costo.value) || 0;
+
+                if (start && end && end > start) {
+                    const durationMs = end - start;
+                    const durationDays = durationMs / (1000 * 60 * 60 * 24);
+                    const costPerDay = durationDays > 0 ? cost / durationDays : 0;
+
+                    document.getElementById('durationSummary').textContent = 
+                        `${Math.ceil(durationDays)} días`;
+                    document.getElementById('costPerDaySummary').textContent = 
+                        `$${costPerDay.toFixed(2)}/día`;
+                }
+            } catch (error) {
+                // Silently handle calculation errors
+            }
+        };
+
+        [fechaInicio, fechaFin, costo].forEach(input => {
+            if (input) {
+                input.addEventListener('input', updateSummary);
+            }
+        });
+
+        // Calcular inicialmente
+        updateSummary();
     }
 
     async handleMaintenanceSubmit(event, failureId) {
@@ -626,6 +899,12 @@ class MaintenanceSystem {
         // Validaciones
         if (maintenanceData.costo < 0) {
             this.showError('El costo no puede ser negativo');
+            document.getElementById('maintenanceCosto').focus();
+            return;
+        }
+
+        if (maintenanceData.costo > 1000000) {
+            this.showError('El costo no puede exceder $1,000,000');
             document.getElementById('maintenanceCosto').focus();
             return;
         }
@@ -773,8 +1052,14 @@ class MaintenanceSystem {
                                 </div>
                                 <div class="info-item">
                                     <strong>Registrado hace:</strong>
-                                    <span>${this.getTimeAgo(new Date(failure.createdAt))}</span>
+                                    <span>${this.formatTimeAgo(new Date(failure.createdAt))}</span>
                                 </div>
+                                ${failure.fechaInicioMantenimiento ? `
+                                <div class="info-item">
+                                    <strong>Mantenimiento iniciado:</strong>
+                                    <span>${this.formatTimeAgo(new Date(failure.fechaInicioMantenimiento))}</span>
+                                </div>
+                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -789,19 +1074,19 @@ class MaintenanceSystem {
                     ${solutionContent}
 
                     <div class="details-actions">
-                        ${failure.estado === 'Abierta' && authSystem.hasPermission('operator') ? `
+                        ${failure.estado === 'Abierta' && this.hasPermission('operator') ? `
                         <button class="btn-success" onclick="maintenanceSystem.startMaintenance(${failure.id})">
                             <i class="fas fa-play"></i> Iniciar Mantenimiento
                         </button>
                         ` : ''}
                         
-                        ${failure.estado === 'En Proceso' && authSystem.hasPermission('operator') ? `
+                        ${failure.estado === 'En Proceso' && this.hasPermission('operator') ? `
                         <button class="btn-primary" onclick="maintenanceSystem.showMaintenanceForm(${failure.id})">
                             <i class="fas fa-check"></i> Completar Mantenimiento
                         </button>
                         ` : ''}
                         
-                        ${failure.estado !== 'Resuelta' && authSystem.hasPermission('operator') ? `
+                        ${failure.estado !== 'Resuelta' && this.hasPermission('operator') ? `
                         <button class="btn-secondary" onclick="maintenanceSystem.editFailure(${failure.id})">
                             <i class="fas fa-edit"></i> Editar Falla
                         </button>
@@ -838,16 +1123,7 @@ class MaintenanceSystem {
         }
     }
 
-    getStatusIcon(estado) {
-        const icons = {
-            'Abierta': 'clock',
-            'En Proceso': 'tools',
-            'Resuelta': 'check-circle'
-        };
-        return icons[estado] || 'question-circle';
-    }
-
-    getTimeAgo(date) {
+    formatTimeAgo(date) {
         const now = new Date();
         const diffMs = now - date;
         const diffMins = Math.floor(diffMs / 60000);
@@ -859,11 +1135,20 @@ class MaintenanceSystem {
         if (diffHours < 24) return `Hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
         if (diffDays < 7) return `Hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
         
-        return date.toLocaleDateString();
+        return date.toLocaleDateString('es-ES');
+    }
+
+    getStatusIcon(estado) {
+        const icons = {
+            'Abierta': 'clock',
+            'En Proceso': 'tools',
+            'Resuelta': 'check-circle'
+        };
+        return icons[estado] || 'question-circle';
     }
 
     async editFailure(failureId) {
-        if (!authSystem.hasPermission('operator')) {
+        if (!this.hasPermission('operator')) {
             this.showError('No tiene permisos para editar fallas');
             return;
         }
@@ -871,7 +1156,7 @@ class MaintenanceSystem {
     }
 
     async deleteFailure(failureId) {
-        if (!authSystem.hasPermission('admin')) {
+        if (!this.hasPermission('admin')) {
             this.showError('No tiene permisos para eliminar fallas');
             return;
         }
@@ -937,10 +1222,15 @@ class MaintenanceSystem {
                 failure.placa.toLowerCase().includes(term) ||
                 failure.componente.toLowerCase().includes(term) ||
                 failure.ubicacion.toLowerCase().includes(term) ||
-                failure.descripcion.toLowerCase().includes(term)
+                failure.descripcion.toLowerCase().includes(term) ||
+                failure.prioridad.toLowerCase().includes(term)
             );
         }
         this.renderFailuresTables();
+    }
+
+    async refreshData() {
+        await this.loadFailures();
     }
 
     // Métodos de utilidad
@@ -955,12 +1245,20 @@ class MaintenanceSystem {
             .replace(/'/g, "&#039;");
     }
 
+    hasPermission(requiredRole) {
+        return window.authSystem && window.authSystem.hasPermission(requiredRole);
+    }
+
     showLoading(message = 'Cargando...') {
-        console.log('Loading:', message);
+        if (window.flotaApp) {
+            window.flotaApp.showLoading(message);
+        }
     }
 
     hideLoading() {
-        // Ocultar loading si está implementado
+        if (window.flotaApp) {
+            window.flotaApp.hideLoading();
+        }
     }
 
     showSuccess(message) {
@@ -976,6 +1274,14 @@ class MaintenanceSystem {
             window.authSystem.showError(message);
         } else {
             alert('❌ ' + message);
+        }
+    }
+
+    showWarning(message) {
+        if (window.authSystem) {
+            window.authSystem.showWarning(message);
+        } else {
+            alert('⚠️ ' + message);
         }
     }
 
@@ -1004,12 +1310,16 @@ class MaintenanceSystem {
     }
 }
 
+// Inicializar sistema de mantenimiento cuando esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof database !== 'undefined') {
+        window.maintenanceSystem = new MaintenanceSystem();
+    }
+});
+
 // Funciones globales
 function showFailureForm() {
     if (window.maintenanceSystem) {
         window.maintenanceSystem.showFailureForm();
     }
 }
-
-// Inicializar sistema de mantenimiento
-window.maintenanceSystem = new MaintenanceSystem();
